@@ -87,10 +87,10 @@ The standard package publish creates:
 
 - one shared package-level `MetadataRegistry`.
 
-Each issuer package publish creates:
+Each issuer package publish creates one of each:
 
-- one shared `Asset<MY_ASSET>`;
-- one shared `AssetMetadata<Receipt<MY_ASSET>>`;
+- shared `Asset<MY_ASSET>`;
+- shared `AssetMetadata<Receipt<MY_ASSET>>`;
 - `MintCap<MY_ASSET>`;
 - `FreezeCap<MY_ASSET>`;
 - `BurnCap<MY_ASSET>`;
