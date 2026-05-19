@@ -12,6 +12,16 @@ canonical `AssetMetadata<Receipt<T>>` metadata entry, shared per-holder
 `Account<T>` objects, and issuer/admin capabilities for regulated ledger
 operations.
 
+## Flow Diagrams
+
+### Admin KYC Policy Flow
+
+![Admin KYC Policy Flow](docs/images/admin-kyc-policy-flow.png)
+
+### User / Package Deployer Flow
+
+![User / Package Deployer Flow](docs/images/user-package-deployer-flow.png)
+
 ## Minimal Issuer Package
 
 ```move
