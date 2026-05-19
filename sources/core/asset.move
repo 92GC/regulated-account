@@ -5,7 +5,6 @@ use regulated_account::amount_math;
 use regulated_account::authority::{Self, WitnessPolicy};
 use regulated_account::constants;
 use regulated_account::keys::IdentityKey;
-use regulated_account::kyc;
 use regulated_account::kyc_policy::{Self, KycPolicy};
 use regulated_account::kyc_proof::{KycApproval, KycSourceConfig, KycSourceKey};
 use regulated_account::shareholders::{Self, Shareholders};
@@ -75,8 +74,7 @@ public fun paused<T>(asset: &Asset<T>): bool { asset.paused }
 public fun default_account_frozen<T>(asset: &Asset<T>): bool { asset.default_account_frozen }
 public fun mode<T>(asset: &Asset<T>): u8 { asset.mode }
 public fun identity_frozen<T>(asset: &Asset<T>, identity: IdentityKey): bool {
-    asset.frozen_identities.contains(identity) &&
-        *asset.frozen_identities.borrow(identity)
+    asset.frozen_identities.contains(identity)
 }
 
 public fun identity_positive_account_count<T>(asset: &Asset<T>, identity: IdentityKey): u64 {
@@ -128,10 +126,6 @@ public(package) fun assert_valid_mode(mode: u8) {
     );
 }
 
-public(package) fun assert_valid_kyc_status(status: u8) {
-    kyc::assert_valid_status(status);
-}
-
 public(package) fun assert_mint_open<T>(asset: &Asset<T>) {
     assert!(!asset.mint_closed, EMintClosed);
 }
@@ -167,20 +161,6 @@ public(package) fun set_kyc<T>(
 
 public(package) fun remove_kyc<T>(asset: &mut Asset<T>, identity: IdentityKey): bool {
     kyc_policy::remove_kyc(&mut asset.kyc_policy, identity)
-}
-
-public(package) fun assert_identity_credit_allowed<T>(
-    asset: &Asset<T>,
-    identity: IdentityKey,
-    now_ms: &Option<u64>,
-) {
-    kyc_policy::assert_identity_credit_allowed(
-        &asset.kyc_policy,
-        asset.mode == constants::mode_open(),
-        asset.mode == constants::mode_allowlist(),
-        identity,
-        now_ms,
-    );
 }
 
 public(package) fun assert_identity_credit_allowed_with_approvals<T>(

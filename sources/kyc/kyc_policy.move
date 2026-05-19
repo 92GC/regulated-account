@@ -99,20 +99,6 @@ public(package) fun remove_kyc(policy: &mut KycPolicy, identity: IdentityKey): b
     }
 }
 
-public(package) fun assert_identity_credit_allowed(
-    policy: &KycPolicy,
-    is_open: bool,
-    is_allowlist: bool,
-    identity: IdentityKey,
-    now_ms: &Option<u64>,
-) {
-    assert!(
-        native_or_default_credit_allowed(policy, is_open, is_allowlist, identity, now_ms) &&
-            policy.required_sources.is_empty(),
-        EIdentityNotAllowed,
-    );
-}
-
 public(package) fun assert_identity_credit_allowed_with_approvals<T>(
     policy: &KycPolicy,
     asset_id: ID,
@@ -280,21 +266,6 @@ fun native_direction_decision(
         }
     } else {
         option::none()
-    }
-}
-
-fun native_or_default_credit_allowed(
-    policy: &KycPolicy,
-    is_open: bool,
-    is_allowlist: bool,
-    identity: IdentityKey,
-    now_ms: &Option<u64>,
-): bool {
-    let native_decision = native_direction_decision(policy, identity, now_ms, true);
-    if (native_decision.is_some()) {
-        *native_decision.borrow()
-    } else {
-        is_open || !is_allowlist
     }
 }
 

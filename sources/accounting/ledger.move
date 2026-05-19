@@ -17,7 +17,7 @@ public fun mint<T>(
     to: &mut Account<T>,
     amount: u64,
 ) {
-    mint_internal(asset, cap, to, amount, authority::time_to_option(time), &approvals, true);
+    mint_internal(asset, cap, to, amount, authority::time_to_option(time), &approvals);
     kyc_proof::destroy_all(approvals);
 }
 
@@ -73,6 +73,8 @@ public fun clawback<T>(
     validation::assert_positive_amount(amount);
     account::assert_asset(from, asset::id(asset));
     account::assert_asset(to, asset::id(asset));
+    // Clawback is a recovery path: source freeze state does not block the debit,
+    // but the destination must still be eligible to receive.
     account::assert_not_frozen(to);
     let now_ms = authority::time_to_option(time);
     asset::assert_identity_not_frozen(asset, account::identity(to));
@@ -127,7 +129,6 @@ fun mint_internal<T>(
     amount: u64,
     now_ms: Option<u64>,
     approvals: &vector<KycApproval<T>>,
-    emit_event: bool,
 ) {
     caps::assert_mint(asset::id(asset), cap);
     validation::assert_positive_amount(amount);
@@ -136,12 +137,11 @@ fun mint_internal<T>(
     account::assert_asset(to, asset::id(asset));
     account::assert_not_frozen(to);
     asset::assert_identity_not_frozen(asset, account::identity(to));
+    // Mint uses the same recipient credit gate as transfers.
     authorization::assert_public_credit_allowed(asset, to, &now_ms, approvals);
     asset::increase_supply(asset, amount);
     credit_internal(asset, to, amount);
-    if (emit_event) {
-        events::emit_mint(asset::id(asset), account::id(to), amount);
-    };
+    events::emit_mint(asset::id(asset), account::id(to), amount);
 }
 
 fun burn_internal<T>(

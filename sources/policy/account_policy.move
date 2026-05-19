@@ -85,6 +85,11 @@ public fun lock_holder<T>(
     policy_events::emit_holder_locked(asset::id(asset), account::id(account), reason_hash);
 }
 
+/// Updates account holder authority.
+///
+/// When moving a package-held account to an address holder, first call
+/// `set_identity` with `keys::identity_address(new_holder)`, then call
+/// `set_holder` with `keys::holder_address(new_holder)`.
 public fun set_holder<T>(
     asset: &Asset<T>,
     cap: &RegistrationCap<T>,

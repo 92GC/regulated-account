@@ -128,8 +128,10 @@ public fun new_account_with_identity<T>(
     ctx: &mut TxContext,
 ): Account<T> {
     let now_ms = option::none();
+    let approvals = vector[];
     asset::assert_identity_not_frozen(asset, identity);
-    asset::assert_identity_credit_allowed(asset, identity, &now_ms);
+    asset::assert_identity_credit_allowed_with_approvals(asset, identity, &now_ms, &approvals);
+    approvals.destroy_empty();
     account::new(
         asset::id(asset),
         holder,
@@ -208,8 +210,10 @@ public fun new_account_with_identity_at_time<T>(
     ctx: &mut TxContext,
 ): Account<T> {
     let now_ms = authority::time_to_option(time);
+    let approvals = vector[];
     asset::assert_identity_not_frozen(asset, identity);
-    asset::assert_identity_credit_allowed(asset, identity, &now_ms);
+    asset::assert_identity_credit_allowed_with_approvals(asset, identity, &now_ms, &approvals);
+    approvals.destroy_empty();
     account::new(
         asset::id(asset),
         holder,

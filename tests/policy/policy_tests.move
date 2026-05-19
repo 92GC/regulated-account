@@ -1153,6 +1153,65 @@ fun holder_lock_blocks_holder_change() {
     ts::end(scenario);
 }
 
+#[test]
+fun package_held_account_converts_to_address_holder_after_identity_update() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            mut asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::open_mode(), ctx);
+        let registration_cap = test_helpers::new_registration_cap(&asset, ctx);
+
+        let new_holder = keys::holder_address(@0xB0B);
+        let new_identity = keys::identity_from_holder(new_holder);
+        let mut account = test_helpers::new_account_with_identity(
+            &asset,
+            keys::holder_package(@0xF00D),
+            keys::identity_external(@0xCAFE),
+            true,
+            ctx,
+        );
+
+        account_policy::set_identity(
+            &mut asset,
+            &registration_cap,
+            authority::no_time(),
+            vector[],
+            &mut account,
+            new_identity,
+            b"address-identity",
+        );
+        account_policy::set_holder(
+            &asset,
+            &registration_cap,
+            &mut account,
+            new_holder,
+            b"address-holder",
+        );
+
+        assert!(account::holder(&account) == new_holder, 0);
+        assert!(account::identity(&account) == new_identity, 1);
+
+        destroy(account);
+        destroy(asset);
+        destroy(registration_cap);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
 #[test, expected_failure(abort_code = 5, location = regulated_account::account)]
 fun address_holder_identity_update_requires_matching_identity() {
     let mut scenario = ts::begin(@0xA);

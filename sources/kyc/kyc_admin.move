@@ -17,7 +17,6 @@ public fun set_kyc<T>(
     external_ref_hash: vector<u8>,
 ) {
     caps::assert_policy(asset::id(asset), cap);
-    asset::assert_valid_kyc_status(status);
     validation::assert_external_ref_hash(&external_ref_hash);
     asset::set_kyc(asset, identity, status, expires_ms, external_ref_hash);
     policy_events::emit_kyc_updated(asset::id(asset), identity, status, expires_ms, external_ref_hash);
