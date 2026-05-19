@@ -16,10 +16,11 @@ const MAX_RESTRICTED_LOTS: u64 = 128;
 const EAssetMismatch: u64 = 3;
 const EAccountFrozen: u64 = 6;
 const EInsufficientBalance: u64 = 8;
-const EImmutableOwner: u64 = 14;
+const EImmutableHolder: u64 = 14;
 const ELockedBalanceExceeded: u64 = 24;
 const ERestrictedLotLimit: u64 = 25;
 const ENotAuthorized: u64 = 5;
+const ETimeRequired: u64 = 33;
 
 /// Time-locked balance lot. The amount is non-transferable until `unlock_ms`.
 public struct RestrictedLot has copy, drop, store {
@@ -38,7 +39,7 @@ public struct Account<phantom T> has key {
     locked_balance: u64,
     restricted_lots: vector<RestrictedLot>,
     frozen: bool,
-    immutable_owner: bool,
+    immutable_holder: bool,
     memo_required: bool,
     allow_public_credits: bool,
 }
@@ -48,7 +49,7 @@ public(package) fun new<T>(
     holder: HolderKey,
     identity: IdentityKey,
     frozen: bool,
-    immutable_owner: bool,
+    immutable_holder: bool,
     memo_required: bool,
     allow_public_credits: bool,
     ctx: &mut TxContext,
@@ -64,7 +65,7 @@ public(package) fun new<T>(
         locked_balance: 0,
         restricted_lots: vector[],
         frozen,
-        immutable_owner,
+        immutable_holder,
         memo_required,
         allow_public_credits,
     }
@@ -106,7 +107,7 @@ public fun admin_create<T>(
     holder: HolderKey,
     identity: IdentityKey,
     receipt_recipient: Option<address>,
-    immutable_owner: bool,
+    immutable_holder: bool,
     memo_required: bool,
     allow_public_credits: bool,
     ctx: &mut TxContext,
@@ -117,7 +118,7 @@ public fun admin_create<T>(
         holder,
         identity,
         receipt_recipient,
-        immutable_owner,
+        immutable_holder,
         memo_required,
         allow_public_credits,
         authority::time_to_option(time),
@@ -196,12 +197,12 @@ public(package) fun set_flags<T>(
     account.allow_public_credits = allow_public_credits;
 }
 
-public(package) fun lock_owner<T>(account: &mut Account<T>) {
-    account.immutable_owner = true;
+public(package) fun lock_holder<T>(account: &mut Account<T>) {
+    account.immutable_holder = true;
 }
 
 public(package) fun set_holder<T>(account: &mut Account<T>, holder: HolderKey) {
-    assert!(!account.immutable_owner, EImmutableOwner);
+    assert!(!account.immutable_holder, EImmutableHolder);
     keys::assert_valid_holder(holder);
     account.holder = holder;
 }
@@ -237,7 +238,16 @@ public(package) fun debit<T>(account: &mut Account<T>, amount: u64): bool {
     }
 }
 
-public(package) fun force_debit<T>(account: &mut Account<T>, amount: u64): bool {
+public(package) fun force_debit<T>(
+    account: &mut Account<T>,
+    amount: u64,
+    now_ms: &Option<u64>,
+): bool {
+    if (account.restricted_lots.length() > 0) {
+        assert!(now_ms.is_some(), ETimeRequired);
+        prune_unlocked_restricted_lots(account, now_ms);
+    };
+
     let became_zero = debit(account, amount);
     if (!became_zero) {
         cap_locks_to_balance(account);
@@ -351,7 +361,7 @@ fun cap_locks_to_balance<T>(account: &mut Account<T>) {
 
     // Restricted lots are stored by ascending unlock time, so force debits preserve
     // the earliest-unlocking lots and trim later-unlocking lots first.
-    let mut remaining = account.balance - account.locked_balance;
+    let mut remaining = account.balance;
     let mut kept = vector[];
     let mut i = 0;
     let len = account.restricted_lots.length();
@@ -374,7 +384,7 @@ fun create_internal<T>(
     holder: HolderKey,
     identity: IdentityKey,
     receipt_recipient: Option<address>,
-    immutable_owner: bool,
+    immutable_holder: bool,
     memo_required: bool,
     allow_public_credits: bool,
     now_ms: Option<u64>,
@@ -388,7 +398,7 @@ fun create_internal<T>(
         holder,
         identity,
         asset::default_account_frozen(asset),
-        immutable_owner,
+        immutable_holder,
         memo_required,
         allow_public_credits,
         ctx,

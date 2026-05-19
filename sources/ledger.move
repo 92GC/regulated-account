@@ -56,18 +56,20 @@ public fun burn<T>(
 public fun admin_burn<T>(
     asset: &mut Asset<T>,
     cap: &BurnCap<T>,
+    time: Time,
     account: &mut Account<T>,
     amount: u64,
     reason_hash: vector<u8>,
 ) {
     caps::assert_burn(asset::id(asset), cap);
     validation::assert_external_ref_hash(&reason_hash);
-    burn_internal(asset, account, amount, true, option::none(), reason_hash);
+    burn_internal(asset, account, amount, true, authority::time_to_option(time), reason_hash);
 }
 
 public fun clawback<T>(
     asset: &mut Asset<T>,
     cap: &ClawbackCap<T>,
+    time: Time,
     from: &mut Account<T>,
     to: &mut Account<T>,
     amount: u64,
@@ -80,7 +82,8 @@ public fun clawback<T>(
     account::assert_asset(to, asset::id(asset));
     account::assert_not_frozen(to);
     assert!(account::allow_public_credits(to), EPublicCreditDisabled);
-    force_debit_account(asset, from, amount);
+    let now_ms = authority::time_to_option(time);
+    force_debit_account(asset, from, amount, &now_ms);
     credit_recovery_account(asset, to, amount);
     events::emit_clawback(asset::id(asset), account::id(from), account::id(to), amount, reason_hash);
 }
@@ -144,8 +147,9 @@ public(package) fun force_debit_account<T>(
     asset: &mut Asset<T>,
     account: &mut Account<T>,
     amount: u64,
+    now_ms: &Option<u64>,
 ) {
-    let became_zero = account::force_debit(account, amount);
+    let became_zero = account::force_debit(account, amount, now_ms);
     if (became_zero) {
         asset::unregister_positive_account(asset, account::identity(account));
     } else {
@@ -201,7 +205,7 @@ fun burn_internal<T>(
         account::prepare_transferable_debit(account, amount, &now_ms);
         debit_account(asset, account, amount);
     } else {
-        force_debit_account(asset, account, amount);
+        force_debit_account(asset, account, amount, &now_ms);
     };
     asset::decrease_supply(asset, amount);
     events::emit_burn(asset::id(asset), account::id(account), amount, admin_burn, reason_hash);

@@ -164,7 +164,15 @@ fun clawback_reaches_locked_and_restricted_balance() {
             b"grant",
         );
         compliance::set_locked_balance(&asset, &freeze_cap, &mut alice, 100, b"lock");
-        ledger::clawback(&mut asset, &clawback_cap, &mut alice, &mut bob, 100, b"clawback");
+        ledger::clawback(
+            &mut asset,
+            &clawback_cap,
+            authority::clock_time(&clock),
+            &mut alice,
+            &mut bob,
+            100,
+            b"clawback",
+        );
 
         assert_eq!(account::balance(&alice), 0);
         assert_eq!(account::balance(&bob), 100);
@@ -225,7 +233,15 @@ fun clawback_bypasses_recipient_kyc_for_admin_recovery() {
         );
 
         ledger::mint(&mut asset, &mint_cap, authority::no_time(), &mut alice, 100);
-        ledger::clawback(&mut asset, &clawback_cap, &mut alice, &mut treasury, 25, b"clawback");
+        ledger::clawback(
+            &mut asset,
+            &clawback_cap,
+            authority::no_time(),
+            &mut alice,
+            &mut treasury,
+            25,
+            b"clawback",
+        );
 
         assert_eq!(account::balance(&alice), 75);
         assert_eq!(account::balance(&treasury), 25);
@@ -274,7 +290,15 @@ fun clawback_bypasses_min_positive_balance_for_admin_recovery() {
 
         compliance::set_min_positive_balance(&mut asset, &policy_cap, 100, b"min-balance");
         ledger::mint(&mut asset, &mint_cap, authority::no_time(), &mut alice, 200);
-        ledger::clawback(&mut asset, &clawback_cap, &mut alice, &mut recovery, 5, b"clawback");
+        ledger::clawback(
+            &mut asset,
+            &clawback_cap,
+            authority::no_time(),
+            &mut alice,
+            &mut recovery,
+            5,
+            b"clawback",
+        );
 
         assert_eq!(account::balance(&alice), 195);
         assert_eq!(account::balance(&recovery), 5);
@@ -345,14 +369,34 @@ fun partial_clawback_caps_locked_and_restricted_lots() {
         );
         compliance::set_locked_balance(&asset, &freeze_cap, &mut alice, 80, b"lock");
 
-        ledger::clawback(&mut asset, &clawback_cap, &mut alice, &mut bob, 70, b"clawback");
+        ledger::clawback(
+            &mut asset,
+            &clawback_cap,
+            authority::clock_time(&clock),
+            &mut alice,
+            &mut bob,
+            70,
+            b"clawback",
+        );
 
         assert_eq!(account::balance(&alice), 130);
         assert_eq!(account::locked_balance(&alice), 80);
-        assert_eq!(account::restricted_locked_balance_at(&alice, authority::no_time()), 50);
+        assert_eq!(
+            account::restricted_locked_balance_at(&alice, authority::no_time()),
+            110,
+        );
         assert_eq!(account::transferable_balance_at(&alice, authority::no_time()), 0);
         clock::set_for_testing(&mut clock, 15_000);
-        assert_eq!(account::restricted_locked_balance_at(&alice, authority::clock_time(&clock)), 0);
+        assert_eq!(
+            account::restricted_locked_balance_at(&alice, authority::clock_time(&clock)),
+            50,
+        );
+        assert_eq!(account::transferable_balance_at(&alice, authority::clock_time(&clock)), 0);
+        compliance::set_locked_balance(&asset, &freeze_cap, &mut alice, 0, b"unlock");
+        assert_eq!(
+            account::transferable_balance_at(&alice, authority::clock_time(&clock)),
+            80,
+        );
         assert_eq!(account::balance(&bob), 70);
 
         destroy(alice);
@@ -371,7 +415,7 @@ fun partial_clawback_caps_locked_and_restricted_lots() {
 }
 
 #[test]
-fun force_debit_trims_latest_unlocks_first() {
+fun full_static_lock_does_not_delete_restricted_lots_on_clawback() {
     let mut scenario = ts::begin(@0xA);
     {
         let ctx = scenario.ctx();
@@ -401,15 +445,204 @@ fun force_debit_trims_latest_unlocks_first() {
             ctx,
         );
 
-        ledger::mint_restricted(&mut asset, &mint_cap, authority::clock_time(&clock), &mut alice, 40, 20_000, b"late");
-        ledger::mint_restricted(&mut asset, &mint_cap, authority::clock_time(&clock), &mut alice, 60, 10_000, b"early");
-        ledger::clawback(&mut asset, &clawback_cap, &mut alice, &mut recovery, 50, b"clawback");
+        ledger::mint_restricted(
+            &mut asset,
+            &mint_cap,
+            authority::clock_time(&clock),
+            &mut alice,
+            100,
+            10_000,
+            b"grant",
+        );
+        compliance::set_locked_balance(&asset, &freeze_cap, &mut alice, 100, b"lock");
+
+        ledger::clawback(
+            &mut asset,
+            &clawback_cap,
+            authority::clock_time(&clock),
+            &mut alice,
+            &mut recovery,
+            1,
+            b"clawback",
+        );
+
+        assert_eq!(account::balance(&alice), 99);
+        assert_eq!(account::locked_balance(&alice), 99);
+        assert_eq!(
+            account::restricted_locked_balance_at(&alice, authority::clock_time(&clock)),
+            99,
+        );
+
+        compliance::set_locked_balance(&asset, &freeze_cap, &mut alice, 0, b"unlock");
+        assert_eq!(account::transferable_balance_at(&alice, authority::clock_time(&clock)), 0);
+        clock::set_for_testing(&mut clock, 15_000);
+        assert_eq!(
+            account::transferable_balance_at(&alice, authority::clock_time(&clock)),
+            99,
+        );
+
+        destroy(alice);
+        destroy(recovery);
+        clock::destroy_for_testing(clock);
+        destroy(asset);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(fee_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
+#[test, expected_failure(abort_code = 33, location = regulated_account::account)]
+fun clawback_requires_time_when_restricted_lots_exist() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            mut asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            fee_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::open_mode(), ctx);
+        let mut clock = clock::create_for_testing(ctx);
+        clock::set_for_testing(&mut clock, 0);
+
+        let mut alice = test_helpers::new_account(
+            &asset,
+            keys::holder_address(ctx.sender()),
+            true,
+            ctx,
+        );
+        let mut recovery = test_helpers::new_account(
+            &asset,
+            keys::holder_address(@0xFEE),
+            true,
+            ctx,
+        );
+
+        ledger::mint_restricted(
+            &mut asset,
+            &mint_cap,
+            authority::clock_time(&clock),
+            &mut alice,
+            100,
+            20_000,
+            b"grant",
+        );
+        ledger::clawback(
+            &mut asset,
+            &clawback_cap,
+            authority::no_time(),
+            &mut alice,
+            &mut recovery,
+            1,
+            b"clawback",
+        );
+
+        destroy(alice);
+        destroy(recovery);
+        clock::destroy_for_testing(clock);
+        destroy(asset);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(fee_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
+#[test]
+fun force_debit_prunes_expired_lots_before_trimming() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            mut asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            fee_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::open_mode(), ctx);
+        let mut clock = clock::create_for_testing(ctx);
+        clock::set_for_testing(&mut clock, 0);
+
+        let mut alice = test_helpers::new_account(
+            &asset,
+            keys::holder_address(ctx.sender()),
+            true,
+            ctx,
+        );
+        let mut recovery = test_helpers::new_account(
+            &asset,
+            keys::holder_address(@0xFEE),
+            true,
+            ctx,
+        );
+
+        ledger::mint_restricted(
+            &mut asset,
+            &mint_cap,
+            authority::clock_time(&clock),
+            &mut alice,
+            40,
+            20_000,
+            b"late",
+        );
+        ledger::mint_restricted(
+            &mut asset,
+            &mint_cap,
+            authority::clock_time(&clock),
+            &mut alice,
+            60,
+            10_000,
+            b"early",
+        );
+        clock::set_for_testing(&mut clock, 15_000);
+        ledger::clawback(
+            &mut asset,
+            &clawback_cap,
+            authority::clock_time(&clock),
+            &mut alice,
+            &mut recovery,
+            50,
+            b"clawback",
+        );
 
         assert_eq!(account::balance(&alice), 50);
-        assert_eq!(account::restricted_locked_balance_at(&alice, authority::no_time()), 50);
-        clock::set_for_testing(&mut clock, 15_000);
-        assert_eq!(account::restricted_locked_balance_at(&alice, authority::clock_time(&clock)), 0);
-        assert_eq!(account::transferable_balance_at(&alice, authority::clock_time(&clock)), 50);
+        assert_eq!(
+            account::restricted_locked_balance_at(&alice, authority::no_time()),
+            40,
+        );
+        assert_eq!(
+            account::restricted_locked_balance_at(&alice, authority::clock_time(&clock)),
+            40,
+        );
+        assert_eq!(
+            account::transferable_balance_at(&alice, authority::clock_time(&clock)),
+            10,
+        );
+        clock::set_for_testing(&mut clock, 25_000);
+        assert_eq!(
+            account::restricted_locked_balance_at(&alice, authority::clock_time(&clock)),
+            0,
+        );
+        assert_eq!(
+            account::transferable_balance_at(&alice, authority::clock_time(&clock)),
+            50,
+        );
 
         destroy(alice);
         destroy(recovery);

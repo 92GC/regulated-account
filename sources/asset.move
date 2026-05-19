@@ -38,9 +38,7 @@ public struct Asset<phantom T> has key {
     default_account_frozen: bool,
     fee: FeeConfig,
     kyc: Table<IdentityKey, KycRecord>,
-    shareholder_accounts: Table<IdentityKey, u64>,
     authorized_witnesses: Table<type_name::TypeName, bool>,
-    authorized_packages: Table<address, bool>,
 }
 
 public(package) fun new<T>(
@@ -64,9 +62,7 @@ public(package) fun new<T>(
         default_account_frozen: false,
         fee: fees::zero(),
         kyc: table::new(ctx),
-        shareholder_accounts: table::new(ctx),
         authorized_witnesses: table::new(ctx),
-        authorized_packages: table::new(ctx),
     }
 }
 
@@ -127,11 +123,6 @@ public fun kyc_external_ref_hash<T>(asset: &Asset<T>, identity: IdentityKey): ve
     } else {
         vector[]
     }
-}
-
-public fun authorized_package<T>(asset: &Asset<T>, package_addr: address): bool {
-    asset.authorized_packages.contains(package_addr) &&
-        *asset.authorized_packages.borrow(package_addr)
 }
 
 public fun authorized_witness<T, W: drop>(asset: &Asset<T>): bool {
@@ -355,24 +346,6 @@ public(package) fun deauthorize_witness<T, W: drop>(asset: &mut Asset<T>): type_
         let _removed = asset.authorized_witnesses.remove(witness);
     };
     witness
-}
-
-public(package) fun authorize_package<T>(asset: &mut Asset<T>, package_addr: address) {
-    if (asset.authorized_packages.contains(package_addr)) {
-        *asset.authorized_packages.borrow_mut(package_addr) = true;
-    } else {
-        asset.authorized_packages.add(package_addr, true);
-    };
-}
-
-public(package) fun deauthorize_package<T>(asset: &mut Asset<T>, package_addr: address) {
-    if (asset.authorized_packages.contains(package_addr)) {
-        let _removed = asset.authorized_packages.remove(package_addr);
-    };
-}
-
-public(package) fun package_authorized<T>(asset: &Asset<T>, package_addr: address): bool {
-    authorized_package(asset, package_addr)
 }
 
 public(package) fun witness_authorized<T>(

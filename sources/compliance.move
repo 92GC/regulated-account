@@ -93,26 +93,6 @@ public fun deauthorize_witness<T, W: drop>(asset: &mut Asset<T>, cap: &PolicyCap
     policy_events::emit_witness_authorization_updated(asset::id(asset), witness, false);
 }
 
-public fun authorize_package<T>(
-    asset: &mut Asset<T>,
-    cap: &PolicyCap<T>,
-    package_addr: address,
-) {
-    caps::assert_policy(asset::id(asset), cap);
-    asset::authorize_package(asset, package_addr);
-    policy_events::emit_package_authorization_updated(asset::id(asset), package_addr, true);
-}
-
-public fun deauthorize_package<T>(
-    asset: &mut Asset<T>,
-    cap: &PolicyCap<T>,
-    package_addr: address,
-) {
-    caps::assert_policy(asset::id(asset), cap);
-    asset::deauthorize_package(asset, package_addr);
-    policy_events::emit_package_authorization_updated(asset::id(asset), package_addr, false);
-}
-
 public fun pause<T>(asset: &mut Asset<T>, cap: &PauseCap<T>, reason_hash: vector<u8>) {
     caps::assert_pause(asset::id(asset), cap);
     validation::assert_external_ref_hash(&reason_hash);
@@ -233,7 +213,7 @@ public fun set_account_flags<T>(
     );
 }
 
-public fun lock_owner<T>(
+public fun lock_holder<T>(
     asset: &Asset<T>,
     cap: &RegistrationCap<T>,
     account: &mut Account<T>,
@@ -242,8 +222,8 @@ public fun lock_owner<T>(
     caps::assert_registration(asset::id(asset), cap);
     account::assert_asset(account, asset::id(asset));
     validation::assert_external_ref_hash(&reason_hash);
-    account::lock_owner(account);
-    policy_events::emit_owner_locked(asset::id(asset), account::id(account), reason_hash);
+    account::lock_holder(account);
+    policy_events::emit_holder_locked(asset::id(asset), account::id(account), reason_hash);
 }
 
 public fun set_holder<T>(
@@ -321,11 +301,7 @@ public(package) fun assert_authorized<T>(
         assert!(keys::holder_addr(account::holder(account)) == addr, ENotAuthorized);
         assert!(witness.is_some(), ENotAuthorized);
         let witness_name = *witness.borrow();
-        assert!(
-            asset::package_authorized(asset, addr) ||
-                asset::witness_authorized(asset, witness_name),
-            ENotAuthorized,
-        );
+        assert!(asset::witness_authorized(asset, witness_name), ENotAuthorized);
     } else {
         assert!(false, ENotAuthorized);
     };

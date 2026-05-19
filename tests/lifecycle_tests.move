@@ -59,7 +59,7 @@ fun public_mint_transfer_and_burn() {
         assert_eq!(account::balance(&alice), 750);
         assert_eq!(account::balance(&bob), 250);
 
-        ledger::admin_burn(&mut asset, &burn_cap, &mut bob, 50, b"admin-burn");
+        ledger::admin_burn(&mut asset, &burn_cap, authority::no_time(), &mut bob, 50, b"admin-burn");
         assert_eq!(account::balance(&bob), 200);
         assert_eq!(asset::supply(&asset), 950);
 
@@ -420,7 +420,7 @@ fun zero_amount_admin_burn_rejected() {
         );
         ledger::mint(&mut asset, &mint_cap, authority::no_time(), &mut alice, 10);
 
-        ledger::admin_burn(&mut asset, &burn_cap, &mut alice, 0, b"admin-burn");
+        ledger::admin_burn(&mut asset, &burn_cap, authority::no_time(), &mut alice, 0, b"admin-burn");
 
         destroy(alice);
         destroy(asset);

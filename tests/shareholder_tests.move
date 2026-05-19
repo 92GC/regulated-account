@@ -267,6 +267,138 @@ fun min_positive_balance_blocks_dust_remainder() {
     ts::end(scenario);
 }
 
+#[test, expected_failure(abort_code = 34, location = regulated_account::shareholders)]
+fun min_positive_balance_increase_requires_no_positive_accounts() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            mut asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            fee_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::open_mode(), ctx);
+
+        let mut account = test_helpers::new_account(
+            &asset,
+            keys::holder_address(ctx.sender()),
+            true,
+            ctx,
+        );
+
+        ledger::mint(&mut asset, &mint_cap, authority::no_time(), &mut account, 100);
+        compliance::set_min_positive_balance(&mut asset, &policy_cap, 1, b"raise-min");
+
+        destroy(account);
+        destroy(asset);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(fee_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
+#[test]
+fun min_positive_balance_can_increase_after_all_accounts_exit() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            mut asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            fee_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::open_mode(), ctx);
+
+        let mut account = test_helpers::new_account(
+            &asset,
+            keys::holder_address(ctx.sender()),
+            true,
+            ctx,
+        );
+
+        ledger::mint(&mut asset, &mint_cap, authority::no_time(), &mut account, 100);
+        ledger::burn(
+            &mut asset,
+            authority::owner_authority<TEST>(ctx),
+            authority::no_time(),
+            &mut account,
+            100,
+        );
+        compliance::set_min_positive_balance(&mut asset, &policy_cap, 200, b"raise-min");
+
+        assert_eq!(asset::min_positive_balance(&asset), 200);
+        assert_eq!(account::balance(&account), 0);
+        assert_eq!(asset::total_shareholders(&asset), 0);
+
+        destroy(account);
+        destroy(asset);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(fee_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
+#[test]
+fun min_positive_balance_can_decrease_with_positive_accounts() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            mut asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            fee_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::open_mode(), ctx);
+
+        let mut account = test_helpers::new_account(
+            &asset,
+            keys::holder_address(ctx.sender()),
+            true,
+            ctx,
+        );
+
+        compliance::set_min_positive_balance(&mut asset, &policy_cap, 100, b"min-balance");
+        ledger::mint(&mut asset, &mint_cap, authority::no_time(), &mut account, 100);
+        compliance::set_min_positive_balance(&mut asset, &policy_cap, 50, b"lower-min");
+
+        assert_eq!(asset::min_positive_balance(&asset), 50);
+        assert_eq!(account::balance(&account), 100);
+
+        destroy(account);
+        destroy(asset);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(fee_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
 #[test]
 fun min_positive_balance_allows_full_exit() {
     let mut scenario = ts::begin(@0xA);

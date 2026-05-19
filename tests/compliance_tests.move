@@ -157,6 +157,59 @@ fun denylisted_sender_cannot_transfer_out() {
     ts::end(scenario);
 }
 
+#[test]
+fun denylist_expired_approval_falls_back_to_default_allow() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            mut asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            fee_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::denylist_mode(), ctx);
+        let mut clock = clock::create_for_testing(ctx);
+        clock::set_for_testing(&mut clock, 200);
+
+        let holder = keys::holder_address(ctx.sender());
+        let identity = keys::identity_from_holder(holder);
+        compliance::set_kyc(
+            &mut asset,
+            &policy_cap,
+            identity,
+            asset::kyc_approved(),
+            100,
+            b"expired-approval",
+        );
+
+        let account = test_helpers::new_account_at_time(
+            &asset,
+            holder,
+            true,
+            authority::clock_time(&clock),
+            ctx,
+        );
+
+        assert_eq!(account::balance(&account), 0);
+
+        destroy(account);
+        clock::destroy_for_testing(clock);
+        destroy(asset);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(fee_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
 #[test, expected_failure(abort_code = 11, location = regulated_account::asset)]
 fun locked_compliance_mode_blocks_mode_changes() {
     let mut scenario = ts::begin(@0xA);
@@ -438,7 +491,7 @@ fun pause_cap_allows_admin_burn() {
 
         ledger::mint(&mut asset, &mint_cap, authority::no_time(), &mut account, 10);
         compliance::pause(&mut asset, &pause_cap, b"pause");
-        ledger::admin_burn(&mut asset, &burn_cap, &mut account, 4, b"admin-burn");
+        ledger::admin_burn(&mut asset, &burn_cap, authority::no_time(), &mut account, 4, b"admin-burn");
 
         assert_eq!(account::balance(&account), 6);
         assert_eq!(asset::supply(&asset), 6);
@@ -489,7 +542,15 @@ fun pause_cap_allows_clawback() {
 
         ledger::mint(&mut asset, &mint_cap, authority::no_time(), &mut alice, 10);
         compliance::pause(&mut asset, &pause_cap, b"pause");
-        ledger::clawback(&mut asset, &clawback_cap, &mut alice, &mut recovery, 4, b"clawback");
+        ledger::clawback(
+            &mut asset,
+            &clawback_cap,
+            authority::no_time(),
+            &mut alice,
+            &mut recovery,
+            4,
+            b"clawback",
+        );
 
         assert_eq!(account::balance(&alice), 6);
         assert_eq!(account::balance(&recovery), 4);
@@ -589,6 +650,104 @@ fun expiring_kyc_works_with_explicit_time_before_expiry() {
         destroy(account);
         clock::destroy_for_testing(clock);
         destroy(asset);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(fee_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
+#[test, expected_failure(abort_code = 14, location = regulated_account::account)]
+fun holder_lock_blocks_holder_change() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            fee_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::open_mode(), ctx);
+        let registration_cap = test_helpers::new_registration_cap(&asset, ctx);
+
+        let mut account = test_helpers::new_account(
+            &asset,
+            keys::holder_address(ctx.sender()),
+            true,
+            ctx,
+        );
+
+        compliance::lock_holder(&asset, &registration_cap, &mut account, b"lock-holder");
+        compliance::set_holder(
+            &asset,
+            &registration_cap,
+            &mut account,
+            keys::holder_address(@0xB0B),
+            b"holder-change",
+        );
+
+        destroy(account);
+        destroy(asset);
+        destroy(registration_cap);
+        destroy(mint_cap);
+        destroy(policy_cap);
+        destroy(freeze_cap);
+        destroy(burn_cap);
+        destroy(clawback_cap);
+        destroy(fee_cap);
+        destroy(close_cap);
+    };
+    ts::end(scenario);
+}
+
+#[test]
+fun holder_lock_does_not_block_identity_update() {
+    let mut scenario = ts::begin(@0xA);
+    {
+        let ctx = scenario.ctx();
+        let (
+            mut asset,
+            mint_cap,
+            policy_cap,
+            freeze_cap,
+            burn_cap,
+            clawback_cap,
+            fee_cap,
+            close_cap,
+        ) = test_helpers::new_asset<TEST>(asset::open_mode(), ctx);
+        let registration_cap = test_helpers::new_registration_cap(&asset, ctx);
+        let new_identity = keys::identity_address(@0xC0FFEE);
+
+        let mut account = test_helpers::new_account(
+            &asset,
+            keys::holder_address(ctx.sender()),
+            true,
+            ctx,
+        );
+
+        compliance::lock_holder(&asset, &registration_cap, &mut account, b"lock-holder");
+        compliance::set_identity(
+            &mut asset,
+            &registration_cap,
+            authority::no_time(),
+            &mut account,
+            new_identity,
+            b"identity-update",
+        );
+
+        assert_eq!(account::identity(&account), new_identity);
+
+        destroy(account);
+        destroy(asset);
+        destroy(registration_cap);
         destroy(mint_cap);
         destroy(policy_cap);
         destroy(freeze_cap);

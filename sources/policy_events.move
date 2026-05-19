@@ -87,12 +87,6 @@ public struct WitnessAuthorizationUpdatedEvent has copy, drop {
     active: bool,
 }
 
-public struct PackageAuthorizationUpdatedEvent has copy, drop {
-    asset_id: ID,
-    package_addr: address,
-    active: bool,
-}
-
 public struct AccountFlagsUpdatedEvent has copy, drop {
     asset_id: ID,
     account_id: ID,
@@ -108,7 +102,7 @@ public struct LockedBalanceUpdatedEvent has copy, drop {
     reason_hash: vector<u8>,
 }
 
-public struct OwnerLockedEvent has copy, drop {
+public struct HolderLockedEvent has copy, drop {
     asset_id: ID,
     account_id: ID,
     reason_hash: vector<u8>,
@@ -242,14 +236,6 @@ public(package) fun emit_witness_authorization_updated(
     event::emit(WitnessAuthorizationUpdatedEvent { asset_id, witness, active });
 }
 
-public(package) fun emit_package_authorization_updated(
-    asset_id: ID,
-    package_addr: address,
-    active: bool,
-) {
-    event::emit(PackageAuthorizationUpdatedEvent { asset_id, package_addr, active });
-}
-
 public(package) fun emit_account_flags_updated(
     asset_id: ID,
     account_id: ID,
@@ -275,8 +261,8 @@ public(package) fun emit_locked_balance_updated(
     event::emit(LockedBalanceUpdatedEvent { asset_id, account_id, locked_balance, reason_hash });
 }
 
-public(package) fun emit_owner_locked(asset_id: ID, account_id: ID, reason_hash: vector<u8>) {
-    event::emit(OwnerLockedEvent { asset_id, account_id, reason_hash });
+public(package) fun emit_holder_locked(asset_id: ID, account_id: ID, reason_hash: vector<u8>) {
+    event::emit(HolderLockedEvent { asset_id, account_id, reason_hash });
 }
 
 public(package) fun emit_holder_updated(

@@ -6,21 +6,49 @@ small Move package with its own one-time witness type, then calls
 `regulated_account::regulated_account::create_asset` from that package's `init`.
 
 This is similar to Sui Coin deployment because it uses a one-time witness, but it
-does not create `Coin<T>`, `Currency<T>`, or `TreasuryCap<T>` objects. It creates
-a shared package-level `MetadataRegistry`, a shared `Asset<T>`, a shared
-canonical `AssetMetadata<Receipt<T>>` metadata entry, shared per-holder
-`Account<T>` objects, and issuer/admin capabilities for regulated ledger
-operations.
+does not create `Coin<T>`, `Currency<T>`, or `TreasuryCap<T>` objects. The
+framework package creates one shared package-level `MetadataRegistry` when it is
+published. Each issuer package creates a shared `Asset<T>`, a shared canonical
+`AssetMetadata<Receipt<T>>` metadata entry, and issuer/admin capabilities for
+regulated ledger operations. Issuers and holders then create shared per-holder
+`Account<T>` objects through the account creation entrypoints.
 
 ## Flow Diagrams
 
 ### Admin KYC Policy Flow
 
-![Admin KYC Policy Flow](docs/images/admin-kyc-policy-flow.png)
+```mermaid
+flowchart TD
+    admin[Policy admin] --> kyc[set_kyc: identity, status, expiry, ref]
+    kyc --> mode{Compliance mode}
+    mode -->|allowlist| allow[approved or exempt and not expired]
+    mode -->|denylist| deny[not denied and not marked expired]
+    mode -->|open| open[no KYC gate]
+    allow --> op[account, mint, transfer]
+    deny --> op
+    open --> op
+```
+
+`expires_ms` is evaluated in allowlist mode. In denylist mode, expiry timestamps
+are not evaluated; use `KYC_DENIED` or `KYC_EXPIRED` status to block an identity.
 
 ### User / Package Deployer Flow
 
-![User / Package Deployer Flow](docs/images/user-package-deployer-flow.png)
+```mermaid
+flowchart TD
+    standard[Standard package publish] --> registry[shared MetadataRegistry]
+    issuer[Issuer package publish with OTW] --> create[create_asset in init]
+    create --> asset[shared Asset and metadata]
+    create --> caps[admin caps]
+    user[User or wrapper package] --> account[create Account]
+    caps --> mint[mint or restricted mint]
+    account --> transfer{transfer}
+    transfer -->|no fee receiver| plain[plain transfer]
+    transfer -->|fee receiver configured| fee[fee transfer path]
+```
+
+The fee path is required whenever a fee receiver is configured, even if a
+bps-only fee would round to zero.
 
 ## Minimal Issuer Package
 
@@ -55,10 +83,12 @@ Publish the issuer package:
 sui client publish --gas-budget 100000000
 ```
 
-The publish transaction creates:
+The standard package publish creates:
 
-- one shared package-level `MetadataRegistry` when the regulated-account package
-  itself is published;
+- one shared package-level `MetadataRegistry`.
+
+Each issuer package publish creates:
+
 - one shared `Asset<MY_ASSET>`;
 - one shared `AssetMetadata<Receipt<MY_ASSET>>`;
 - `MintCap<MY_ASSET>`;
@@ -107,12 +137,13 @@ Holder-controlled operations consume a hot-potato `HolderAuthority<T>` value:
 - `authority::owner_authority<T>(ctx)` authorizes an address-held account when the
   transaction sender matches the account holder.
 - `authority::package_authority<T, W>(witness)` authorizes a package-held account when
-  the account holder is the witness package and the issuer has authorized either
-  that witness type or the package address.
+  the account holder is the witness package and the issuer has authorized that
+  exact witness type.
 
 Package authority is intentionally narrow: it lets wrappers, vaults, or DvP
 modules move only their own package-held account. It does not let a package move
-user accounts.
+user accounts. Wrapper packages should keep the authorized witness as an internal
+capability and should not expose public functions that return it.
 
 Operations that can depend on expiring KYC or time-locked balances also consume
 a hot-potato `Time` value:
@@ -122,6 +153,8 @@ a hot-potato `Time` value:
 - `authority::clock_time(&clock)` evaluates KYC expiry and locks against Sui's clock.
   Restricted mints that provide clock time reject already-unlocked lots and
   prune stale unlocked lots before checking lot capacity.
+  Admin burn and clawback also require clock time when the debited account has
+  restricted lots, so stale unlocked lots are pruned before any lock trimming.
 
 Each account stores at most 128 active restricted lots. Lots with the same
 unlock timestamp and external reference hash are coalesced, which keeps
@@ -140,6 +173,9 @@ without aborting. Metadata strings are bounded in core: 16-byte symbol,
 
 Issuers can set a `min_positive_balance` to prevent dust accounts. A holder can
 always exit to zero, but any non-zero balance must meet the configured minimum.
+The minimum can be lowered at any time, but increases are only allowed while
+there are no positive-balance identities; otherwise issuers must first migrate or
+exit affected accounts.
 
 Transfer fees are configured with `set_fee_config`, which takes the receiver
 `Account<T>` by reference and validates that it belongs to the asset, is not
@@ -160,9 +196,10 @@ reverse: the wrapper burns its wrapped coin, then uses package authority to move
 regulated balance from its own account back to the user. In allowlist mode the
 issuer must KYC/approve the wrapper identity before it can receive credits.
 
-Administrative freeze/thaw, clawback, admin burn, and issuer policy changes take
-a bounded `reason_hash` for auditability. Store detailed legal or operations
-records off-chain and put the digest/reference hash on-chain.
+Administrative freeze/thaw and issuer policy changes take a bounded `reason_hash`
+for auditability. Clawback and admin burn take both `Time` and `reason_hash`:
+the time value is used to prune unlocked restricted lots before forced debits,
+and the reason hash ties the action to off-chain legal or operations records.
 Clawback is an admin recovery power: it can credit a non-frozen destination that
 allows public credits even when that destination would fail normal transfer KYC.
 
@@ -194,9 +231,10 @@ code.
 | `account` | 5 | `ENotAuthorized` | Account creation holder/identity does not match sender. |
 | `account` | 6 | `EAccountFrozen` | Operation requires an unfrozen account. |
 | `account` | 8 | `EInsufficientBalance` | Balance or transferable balance is insufficient. |
-| `account` | 14 | `EImmutableOwner` | Account owner has been locked. |
+| `account` | 14 | `EImmutableHolder` | Account holder has been locked. |
 | `account` | 24 | `ELockedBalanceExceeded` | Static lock exceeds account balance. |
 | `account` | 25 | `ERestrictedLotLimit` | Account has reached the restricted-lot cap. |
+| `account` | 33 | `ETimeRequired` | Forced debit of an account with restricted lots requires clock time. |
 | `amount_math` | 25 | `EAmountOverflow` | Checked amount arithmetic overflowed. |
 | `amount_math` | 28 | `EInvalidDisplayScale` | Display scale is zero-denominator or zero-numerator. |
 | `caps` | 4 | `ECapAssetMismatch` | Capability does not belong to the asset. |
@@ -215,10 +253,12 @@ code.
 | `metadata` | 30 | `EMetadataNotRegistered` | Receipt type has no registered metadata. |
 | `shareholders` | 23 | `EShareholderCapExceeded` | Positive-balance identity cap would be exceeded. |
 | `shareholders` | 31 | `EMinPositiveBalance` | Non-zero balance is below the configured minimum. |
+| `shareholders` | 34 | `EMinPositiveBalanceMigrationRequired` | Minimum positive balance cannot be increased while positive accounts exist. |
 | `transfer` | 15 | `EFeeReceiverRequired` | Fee receiver account is required or mismatched. |
 | `transfer` | 16 | `EUseTransferWithFee` | Plain transfer was used while a fee is configured. |
 | `validation` | 10 | `EMemoRequired` | Destination requires a non-empty memo. |
 | `validation` | 27 | `EInvalidVectorSize` | Metadata, memo, or reference hash exceeds its bound. |
+| `validation` | 33 | `EInvalidAmount` | Amount must be greater than zero. |
 
 ## Package Layout
 

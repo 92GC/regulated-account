@@ -7,6 +7,7 @@ use sui::table::{Self, Table};
 
 const EShareholderCapExceeded: u64 = 23;
 const EMinPositiveBalance: u64 = 31;
+const EMinPositiveBalanceMigrationRequired: u64 = 34;
 
 /// Bounded positive-balance account counts by legal identity.
 public struct Shareholders has store {
@@ -48,6 +49,10 @@ public(package) fun set_cap(shareholders: &mut Shareholders, max: Option<u64>) {
 }
 
 public(package) fun set_min_positive_balance(shareholders: &mut Shareholders, min_balance: u64) {
+    assert!(
+        min_balance <= shareholders.min_positive_balance || shareholders.total == 0,
+        EMinPositiveBalanceMigrationRequired
+    );
     shareholders.min_positive_balance = min_balance;
 }
 

@@ -52,10 +52,9 @@ public(package) fun approved_now(record: &KycRecord, now_ms: &Option<u64>): bool
         time_valid(record, now_ms)
 }
 
-public(package) fun not_denied_now(record: &KycRecord, now_ms: &Option<u64>): bool {
+public(package) fun not_denied_now(record: &KycRecord, _now_ms: &Option<u64>): bool {
     record.status != KYC_DENIED &&
-        record.status != KYC_EXPIRED &&
-        time_valid(record, now_ms)
+        record.status != KYC_EXPIRED
 }
 
 fun time_valid(record: &KycRecord, now_ms: &Option<u64>): bool {
