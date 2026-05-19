@@ -5,6 +5,9 @@ calling a factory from an existing coin type. Instead, each issuer publishes a
 small Move package with its own one-time witness type, then calls
 `regulated_account::regulated_account::create_asset` from that package's `init`.
 
+A Sui-native regulated account standard for the same design space as ERC-1400,
+ERC-3643, and Token-2022, without privacy extensions or a global KYC singleton.
+
 This is similar to Sui Coin deployment because it uses a one-time witness, but it
 does not create `Coin<T>`, `Currency<T>`, or `TreasuryCap<T>` objects. The
 framework package creates one shared package-level `MetadataRegistry` when it is
@@ -106,107 +109,37 @@ The caps are transferred to the `admin` address passed to `create_asset`.
 
 ## After Publish
 
-The issuer or users create `Account<T>` objects for holders. In allowlist mode,
-the issuer first approves identities with `set_kyc`, then mints into approved
-accounts.
-
-`set_kyc` records eligibility status, expiry, and an optional external reference
-hash. Issuer-specific attributes such as jurisdiction, investor class, and tax
-residency belong off-chain behind that hash or in typed extension objects.
-
-If `mode_mutable` is set at creation, the issuer can switch between allowlist,
-denylist, and open mode until calling `lock_compliance_mode`, which permanently
-freezes the compliance mode.
-
-The important distinction from Coin is:
-
-- Coin: users hold transferable `Coin<T>` objects.
-- Regulated Account: balances live in shared `Account<T>` objects controlled by
-  holder authority plus issuer/regulator caps.
-
-Metadata follows the same typed-discovery idea as Sui Currency. Wallets discover
-an owned `Receipt<T>` object, then read the shared `AssetMetadata<Receipt<T>>`
-object for symbol, name, description, icon URL, and decimals. `Asset<T>` carries
-policy and supply state, not branding.
-After an issuer package publish, anyone can call `metadata::register<T>` with the
-shared `MetadataRegistry` and `AssetMetadata<Receipt<T>>`; the registry then maps
-`receipt_type<T>()` to the canonical metadata object ID.
-
-Holder-controlled operations consume a hot-potato `HolderAuthority<T>` value:
-
-- `authority::owner_authority<T>(ctx)` authorizes an address-held account when the
-  transaction sender matches the account holder.
-- `authority::package_authority<T, W>(witness)` authorizes a package-held account when
-  the account holder is the witness package and the issuer has authorized that
-  exact witness type.
-
-Package authority is intentionally narrow: it lets wrappers, vaults, or DvP
-modules move only their own package-held account. It does not let a package move
-user accounts. Wrapper packages should keep the authorized witness as an internal
-capability and should not expose public functions that return it.
-
-Operations that can depend on expiring KYC or time-locked balances also consume
-a hot-potato `Time` value:
-
-- `authority::no_time()` fails closed for expiring KYC and treats restricted lots as
-  locked.
-- `authority::clock_time(&clock)` evaluates KYC expiry and locks against Sui's clock.
-  Restricted mints that provide clock time reject already-unlocked lots and
-  prune stale unlocked lots before checking lot capacity.
-  Admin burn and clawback also require clock time when the debited account has
-  restricted lots, so stale unlocked lots are pruned before any lock trimming.
-
-Each account stores at most 128 active restricted lots. Lots with the same
-unlock timestamp and external reference hash are coalesced, which keeps
-transferable-balance and lot-insertion scans bounded while supporting common
-vesting and lockup schedules.
-
-Generic transfer hooks are intentionally not part of core. The canonical
-transfer path enforces built-in policy directly: KYC mode, freeze state, pause,
-shareholder caps, restricted lots, memo requirements, minimum positive balance,
-and configured fees.
-
-`supply` reports the canonical u64 balance supply. Display-balance helpers
-return `Option<u64>` so wallets/indexers can handle display-scale overflow
-without aborting. Metadata strings are bounded in core: 16-byte symbol,
-64-byte name, 512-byte description, and 256-byte icon URL.
-
-Issuers can set a `min_positive_balance` to prevent dust accounts. A holder can
-always exit to zero, but any non-zero balance must meet the configured minimum.
-The minimum can be lowered at any time, but increases are only allowed while
-there are no positive-balance identities; otherwise issuers must first migrate or
-exit affected accounts.
-
-Transfer fees are configured with `set_fee_config`, which takes the receiver
-`Account<T>` by reference and validates that it belongs to the asset, is not
-frozen, and can receive public credits at the supplied `Time`. Use
-`clear_fee_config` to disable fees. Plain `transfer` is only available when no
-fee receiver is configured; once fees are configured, callers must use a
-fee-bearing transfer path even if a bps-only fee would round to zero. Most fee
-transfers use `transfer_with_fee_account`; if the configured fee receiver is
-also the sender or recipient, use `transfer_with_sender_fee_account` or
-`transfer_with_recipient_fee_account` because Move cannot pass one shared object
-as multiple mutable account references. Dedicated fee-account credits are exempt
-from `min_positive_balance`, while recipient-fee transfers enforce the
-recipient's final positive balance as a normal account credit.
-
-Wrapper integrations use normal transfers. A user deposits by signing a transfer
-from their address account to the wrapper's package-held account. Unwrap is the
-reverse: the wrapper burns its wrapped coin, then uses package authority to move
-regulated balance from its own account back to the user. In allowlist mode the
-issuer must KYC/approve the wrapper identity before it can receive credits.
-
-Administrative freeze/thaw and issuer policy changes take a bounded `reason_hash`
-for auditability. Clawback and admin burn take both `Time` and `reason_hash`:
-the time value is used to prune unlocked restricted lots before forced debits,
-and the reason hash ties the action to off-chain legal or operations records.
-Clawback is an admin recovery power: it can credit a non-frozen destination that
-allows public credits even when that destination would fail normal transfer KYC.
-
-Pause blocks public balance-changing flows: transfer, mint, public burn, and
-public account creation. Admin burn, clawback, fee changes, and policy changes
-remain available so operators can respond during incidents.
-
-Typed extensions should be separate objects, for example `BondTerms<T>` or
-`EscrowTerms<T>`, and should bind to the core asset/account with
-`asset::id(&asset)` and `account::id(&account)`.
+- Create shared `Account<T>` objects for holders.
+- In allowlist mode, approve identities with `set_kyc` before minting or
+  receiving.
+- On-chain KYC stores status, expiry, and `external_ref_hash`; keep rich
+  compliance data off-chain or in typed extensions.
+- `mode_mutable` allows allowlist, denylist, and open mode changes until
+  `lock_compliance_mode`.
+- Balances live in shared `Account<T>` objects, not transferable `Coin<T>`.
+- Wallets use `Receipt<T>` plus `AssetMetadata<Receipt<T>>`; `Asset<T>` stores
+  policy and supply, not branding.
+- Register metadata with `metadata::register<T>` and the shared registry.
+- Holder actions use `HolderAuthority<T>` from owner authority or an authorized
+  package witness.
+- Package authority can move only its package-held account, not user accounts.
+- Time-sensitive paths use `Time`: `no_time()` fails closed, and
+  `clock_time(&clock)` evaluates KYC expiry and locks.
+- Restricted lots are capped at 128 active lots and coalesced by unlock time and
+  reference hash.
+- Transfers enforce KYC, freeze, pause, shareholder caps, restricted lots, memo
+  rules, minimum positive balance, and fees.
+- `supply` is canonical `u64`; display helpers return `Option<u64>`; metadata
+  fields are bounded.
+- `min_positive_balance` blocks dust, permits full exit to zero, and can only
+  increase when no identities have positive balances.
+- Fee config requires fee transfer paths while a fee receiver is configured.
+- Use sender or recipient fee paths when the fee receiver is also the sender or
+  recipient account.
+- Wrapper deposits and unwraps use normal transfers plus package authority.
+- In allowlist mode, wrapper package identities must be approved before receiving.
+- Admin policy changes use `reason_hash`; clawback and admin burn also use
+  `Time`.
+- Pause blocks public transfer, mint, burn, and account creation; admin recovery
+  and policy controls remain available.
+- Typed extensions bind to core objects with `asset::id` and `account::id`.
