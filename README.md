@@ -27,6 +27,10 @@ by the account object itself. For a normal address-held account,
 accounts can use external identity keys for wrapper, custody, or off-chain legal
 identity models.
 
+On-chain KYC is asset-specific eligibility metadata, not a personal KYC
+database. Detailed records should stay off-chain behind `external_ref_hash`, or
+in separate typed extension objects when an issuer needs on-chain extensions.
+
 ## Flow Diagrams
 
 ### Admin KYC Policy Flow
@@ -177,8 +181,9 @@ admin address.
   expiry, and `KYC_DIVEST_ONLY` is debit-only.
 - KYC-sensitive calls take up to 128 `KycApproval<T>` values; local-only flows
   pass `vector[]`.
-- On-chain KYC stores status, expiry, and `external_ref_hash`; keep rich
-  compliance data off-chain or in typed extensions.
+- On-chain KYC stores only asset-specific eligibility status, expiry, and
+  `external_ref_hash`; keep rich compliance data off-chain or in typed
+  extensions.
 - `mode_mutable` allows allowlist, denylist, and open mode changes until
   `lock_compliance_mode`.
 - Balances live in shared `Account<T>` objects, not transferable `Coin<T>`.
