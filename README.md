@@ -15,9 +15,11 @@ This is similar to Sui Coin deployment because it uses a one-time witness, but i
 does not create `Coin<T>`, `Currency<T>`, or `TreasuryCap<T>` objects. The
 framework package creates one shared package-level `MetadataRegistry` when it is
 published. Each issuer package creates a shared `Asset<T>`, a shared canonical
-`AssetMetadata<Receipt<T>>` metadata entry, and issuer/admin capabilities for
-regulated ledger operations. Issuers and holders then create shared per-holder
-`Account<T>` objects through the account creation entrypoints.
+`AssetMetadata<Receipt<T>>` metadata entry, and issuer capabilities for
+regulated ledger operations. The issuer package decides how those capabilities
+are transferred, split across roles, or wrapped by governance. Issuers and
+holders then create shared per-holder `Account<T>` objects through the account
+creation entrypoints.
 
 ## Flow Diagrams
 
@@ -45,7 +47,8 @@ flowchart TD
     framework[Framework package publish] --> registry[shared MetadataRegistry]
     issuer[Issuer package publish with OTW] --> create[create_asset in init]
     create --> asset[shared Asset and metadata]
-    create --> caps[admin caps]
+    create --> caps[returned caps]
+    caps --> custody[issuer-chosen custody]
     user[User or wrapper package] --> account[create Account]
     caps --> mint[mint or restricted mint]
     account --> transfer{transfer}
@@ -67,7 +70,18 @@ use regulated_account::asset;
 public struct MY_ASSET has drop {}
 
 fun init(witness: MY_ASSET, ctx: &mut TxContext) {
-    ra::create_asset(
+    let (
+        mint_cap,
+        freeze_cap,
+        burn_cap,
+        clawback_cap,
+        policy_cap,
+        registration_cap,
+        fee_cap,
+        metadata_cap,
+        pause_cap,
+        close_mint_cap,
+    ) = ra::create_asset(
         witness,
         b"MYASSET".to_string(),
         b"My Asset".to_string(),
@@ -77,9 +91,19 @@ fun init(witness: MY_ASSET, ctx: &mut TxContext) {
         option::some(1_000_000),
         asset::allowlist_mode(),
         true,
-        ctx.sender(),
         ctx,
     );
+
+    transfer::public_transfer(mint_cap, ctx.sender());
+    transfer::public_transfer(freeze_cap, ctx.sender());
+    transfer::public_transfer(burn_cap, ctx.sender());
+    transfer::public_transfer(clawback_cap, ctx.sender());
+    transfer::public_transfer(policy_cap, ctx.sender());
+    transfer::public_transfer(registration_cap, ctx.sender());
+    transfer::public_transfer(fee_cap, ctx.sender());
+    transfer::public_transfer(metadata_cap, ctx.sender());
+    transfer::public_transfer(pause_cap, ctx.sender());
+    transfer::public_transfer(close_mint_cap, ctx.sender());
 }
 ```
 
@@ -108,7 +132,10 @@ Each issuer package publish creates one of each:
 - `PauseCap<MY_ASSET>`;
 - `CloseMintCap<MY_ASSET>`.
 
-The caps are transferred to the `admin` address passed to `create_asset`.
+`create_asset` returns the caps to the issuer package's `init`. The issuer
+package must then transfer, split, wrap, or otherwise store them. This matches
+Sui's issuer-controlled cap custody pattern instead of forcing one framework
+admin address.
 
 ## After Publish
 
