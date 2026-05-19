@@ -122,6 +122,8 @@ The caps are transferred to the `admin` address passed to `create_asset`.
 - Balances live in shared `Account<T>` objects, not transferable `Coin<T>`.
 - Wallets use `Receipt<T>` plus `AssetMetadata<Receipt<T>>`; `Asset<T>` stores
   policy and supply, not branding.
+- `Receipt<T>` carries no balance; it tells wallets and indexers to display the
+  holder's regulated account balance.
 - Register metadata with `metadata::register<T>` and the shared registry.
 - Holder actions use `HolderAuthority<T>` from owner authority or an authorized
   package witness.
