@@ -1,1 +1,3 @@
 build/
+sources/non_test_sources.txt
+sources_concat.txt

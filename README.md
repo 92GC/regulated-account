@@ -21,6 +21,12 @@ are transferred, split across roles, or wrapped by governance. Issuers and
 holders then create shared per-holder `Account<T>` objects through the account
 creation entrypoints.
 
+Balances live in shared `Account<T>` objects. KYC is keyed by `IdentityKey`, not
+by the account object itself. For a normal address-held account,
+`keys::identity_address(addr)` is the required address identity; package-held
+accounts can use external identity keys for wrapper, custody, or off-chain legal
+identity models.
+
 ## Flow Diagrams
 
 ### Admin KYC Policy Flow
@@ -28,17 +34,37 @@ creation entrypoints.
 ```mermaid
 flowchart TD
     admin[Policy admin] --> kyc[set_kyc: identity, status, expiry, ref]
+    admin --> trust[trust KYC source: registry id, required flag]
+    registry[External KYC registry] --> proof[KycApproval proof]
     kyc --> mode{Compliance mode}
-    mode -->|allowlist| allow[approved or exempt and not expired]
-    mode -->|denylist| deny[not denied and not marked expired]
-    mode -->|open| open[no KYC gate]
+    proof --> mode
+    trust --> mode
+    mode -->|allowlist| allow[native credit/debit state or trusted proof]
+    mode -->|denylist| deny[default allow unless native state restricts direction]
+    mode -->|open| open[default allow unless blocked]
     allow --> op[account, mint, transfer]
     deny --> op
     open --> op
 ```
 
-`expires_ms` is evaluated in allowlist mode. In denylist mode, expiry timestamps
-are not evaluated; use `KYC_DENIED` or `KYC_EXPIRED` status to block an identity.
+Native KYC records are directional. Effective status is computed with
+`expires_ms`; after a nonzero expiry is passed, or no clock is provided for an
+expiring record, the record is treated as `KYC_EXPIRED`.
+
+| Status | Credit / receive / mint | Debit / transfer out / public burn |
+| --- | --- | --- |
+| `KYC_APPROVED` | yes | yes |
+| `KYC_EXEMPT` | yes | yes |
+| `KYC_PENDING` before expiry | yes | no |
+| `KYC_PENDING` after expiry | no | no |
+| `KYC_DIVEST_ONLY` | no | yes |
+| `KYC_DENIED` | no | no |
+| `KYC_EXPIRED` | no | no |
+
+If an identity has no native KYC record, or its native status is `KYC_UNKNOWN`,
+allowlist mode requires a trusted external approval while denylist and open
+modes default-allow. Required external KYC sources are enforced in every
+compliance mode, including open mode.
 
 ### User / Package Deployer Flow
 
@@ -51,13 +77,8 @@ flowchart TD
     caps --> custody[issuer-chosen custody]
     user[User or wrapper package] --> account[create Account]
     caps --> mint[mint or restricted mint]
-    account --> transfer{transfer}
-    transfer -->|no fee receiver| plain[plain transfer]
-    transfer -->|fee receiver configured| fee[fee transfer path]
+    account --> transfer[plain transfer]
 ```
-
-The fee path is required whenever a fee receiver is configured, even if a
-bps-only fee would round to zero.
 
 ## Minimal Issuer Package
 
@@ -77,7 +98,6 @@ fun init(witness: MY_ASSET, ctx: &mut TxContext) {
         clawback_cap,
         policy_cap,
         registration_cap,
-        fee_cap,
         metadata_cap,
         pause_cap,
         close_mint_cap,
@@ -91,6 +111,7 @@ fun init(witness: MY_ASSET, ctx: &mut TxContext) {
         option::some(1_000_000),
         asset::allowlist_mode(),
         true,
+        vector[],
         ctx,
     );
 
@@ -100,7 +121,6 @@ fun init(witness: MY_ASSET, ctx: &mut TxContext) {
     transfer::public_transfer(clawback_cap, ctx.sender());
     transfer::public_transfer(policy_cap, ctx.sender());
     transfer::public_transfer(registration_cap, ctx.sender());
-    transfer::public_transfer(fee_cap, ctx.sender());
     transfer::public_transfer(metadata_cap, ctx.sender());
     transfer::public_transfer(pause_cap, ctx.sender());
     transfer::public_transfer(close_mint_cap, ctx.sender());
@@ -127,7 +147,6 @@ Each issuer package publish creates one of each:
 - `ClawbackCap<MY_ASSET>`;
 - `PolicyCap<MY_ASSET>`;
 - `RegistrationCap<MY_ASSET>`;
-- `FeeCap<MY_ASSET>`;
 - `MetadataCap<Receipt<MY_ASSET>>`;
 - `PauseCap<MY_ASSET>`;
 - `CloseMintCap<MY_ASSET>`.
@@ -140,8 +159,24 @@ admin address.
 ## After Publish
 
 - Create shared `Account<T>` objects for holders.
-- In allowlist mode, approve identities with `set_kyc` before minting or
-  receiving.
+- In allowlist mode, approve identities with `set_kyc` before full two-way
+  operation. `KYC_PENDING` identities can receive before expiry but cannot debit;
+  `KYC_DIVEST_ONLY` identities can debit but cannot receive.
+- Optional shared KYC registries can issue live `KycApproval<T>` proofs.
+- Registry operators create `KycRegistry<R>` with their own one-time witness and
+  manage it with `KycRegistryCap<R>`.
+- Destroy `KycRegistryCap<R>` to renounce registry administration.
+- Accepted KYC registries can be configured at `create_asset` time with
+  `KycSourceConfig` values.
+- `PolicyCap<T>` can later trust or untrust KYC source instances for that asset.
+- Each asset can trust up to 128 KYC sources, with up to 32 required sources.
+- A trusted external source can satisfy allowlist KYC; a required source must
+  provide a valid proof even when native KYC is approved.
+- Native asset KYC remains authoritative when present: `KYC_DENIED` and
+  `KYC_EXPIRED` block both directions, `KYC_PENDING` is credit-only before
+  expiry, and `KYC_DIVEST_ONLY` is debit-only.
+- KYC-sensitive calls take up to 128 `KycApproval<T>` values; local-only flows
+  pass `vector[]`.
 - On-chain KYC stores status, expiry, and `external_ref_hash`; keep rich
   compliance data off-chain or in typed extensions.
 - `mode_mutable` allows allowlist, denylist, and open mode changes until
@@ -151,27 +186,33 @@ admin address.
   `AssetMetadata<Receipt<T>>` for discovery.
 - `Receipt<T>` carries no balance; it is intended as a signal to display the
   holder's regulated account balance.
-- Register metadata with `metadata::register<T>` and the shared registry.
+- Register metadata with `metadata::register<T>`, the shared registry, and the
+  asset's `MetadataCap<Receipt<T>>`.
 - Holder actions use `HolderAuthority<T>` from owner authority or an authorized
   package witness.
 - Package authority can move only its package-held account, not user accounts.
 - Time-sensitive paths use `Time`: `no_time()` fails closed, and
   `clock_time(&clock)` evaluates KYC expiry and locks.
-- Restricted lots are capped at 128 active lots and coalesced by unlock time and
-  reference hash.
+- Restricted lots are capped at 1024 active lots, coalesced by unlock time and
+  reference hash, and tracked with cached aggregate accounting.
+- Freeze is identity-level for operation checks and account creation: freezing an
+  account also freezes its identity until thawed.
 - Transfers enforce KYC, freeze, pause, shareholder caps, restricted lots, memo
-  rules, minimum positive balance, and fees.
-- `supply` is canonical `u64`; display helpers return `Option<u64>`; metadata
-  fields are bounded.
+  rules, and minimum positive balance.
+- `supply` is canonical `u64`; `MetadataCap<Receipt<T>>` can update display
+  decimals; metadata fields are bounded.
 - `min_positive_balance` blocks dust, permits full exit to zero, and can only
   increase when no identities have positive balances.
-- Fee config requires fee transfer paths while a fee receiver is configured.
-- Use sender or recipient fee paths when the fee receiver is also the sender or
-  recipient account.
 - Wrapper deposits and unwraps use normal transfers plus package authority.
 - In allowlist mode, wrapper package identities must be approved before receiving.
+- Clawback enforces recipient credit KYC and recipient minimum positive balance,
+  while still allowing partial recovery amounts whose resulting balances satisfy
+  policy.
 - Admin policy changes use `reason_hash`; clawback and admin burn also use
-  `Time`.
+  `Time`. Clawback also accepts `KycApproval<T>` proofs for the recipient credit
+  check. Operator tooling can pass `clock_time(&clock)` unconditionally for
+  recovery paths; `no_time()` is only valid when the debited account has no
+  active restricted lots.
 - Pause blocks public transfer, mint, burn, and account creation; admin recovery
   and policy controls remain available.
 - Typed extensions bind to core objects with `asset::id` and `account::id`.
