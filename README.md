@@ -120,9 +120,9 @@ The caps are transferred to the `admin` address passed to `create_asset`.
 - `mode_mutable` allows allowlist, denylist, and open mode changes until
   `lock_compliance_mode`.
 - Balances live in shared `Account<T>` objects, not transferable `Coin<T>`.
-- Wallets use `Receipt<T>` plus `AssetMetadata<Receipt<T>>`; `Asset<T>` stores
-  policy and supply, not branding.
-- `Receipt<T>` carries no balance; it tells wallets and indexers to display the
+- If this standard is adopted, wallets and indexers should use `Receipt<T>` plus
+  `AssetMetadata<Receipt<T>>` for discovery.
+- `Receipt<T>` carries no balance; it is intended as a signal to display the
   holder's regulated account balance.
 - Register metadata with `metadata::register<T>` and the shared registry.
 - Holder actions use `HolderAuthority<T>` from owner authority or an authorized
