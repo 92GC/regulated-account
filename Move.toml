@@ -9,4 +9,4 @@ license = "MIT"
 regulated_account = "0x0"
 
 [environments]
-localnet = "4afd09da"
+testnet = "4c78adac"

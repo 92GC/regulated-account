@@ -8,6 +8,9 @@ small Move package with its own one-time witness type, then calls
 A Sui-native regulated account framework for the same design space as ERC-1400,
 ERC-3643, and Token-2022, without privacy extensions or a global KYC singleton.
 
+Deployment status: this package is not deployed on Sui mainnet. The checked-in
+Move lockfile is pinned for testnet development and review only.
+
 This is similar to Sui Coin deployment because it uses a one-time witness, but it
 does not create `Coin<T>`, `Currency<T>`, or `TreasuryCap<T>` objects. The
 framework package creates one shared package-level `MetadataRegistry` when it is
