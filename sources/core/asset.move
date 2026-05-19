@@ -71,9 +71,6 @@ public fun supply<T>(asset: &Asset<T>): u64 { asset.supply }
 public fun max_supply<T>(asset: &Asset<T>): Option<u64> { asset.max_supply }
 public fun total_shareholders<T>(asset: &Asset<T>): u64 { shareholders::total(&asset.shareholders) }
 public fun shareholder_cap<T>(asset: &Asset<T>): Option<u64> { shareholders::cap(&asset.shareholders) }
-public fun min_positive_balance<T>(asset: &Asset<T>): u64 {
-    shareholders::min_positive_balance(&asset.shareholders)
-}
 public fun paused<T>(asset: &Asset<T>): bool { asset.paused }
 public fun default_account_frozen<T>(asset: &Asset<T>): bool { asset.default_account_frozen }
 public fun mode<T>(asset: &Asset<T>): u8 { asset.mode }
@@ -242,10 +239,6 @@ public(package) fun set_shareholder_cap<T>(
     shareholders::set_cap(&mut asset.shareholders, max_shareholders);
 }
 
-public(package) fun set_min_positive_balance<T>(asset: &mut Asset<T>, min_balance: u64) {
-    shareholders::set_min_positive_balance(&mut asset.shareholders, min_balance);
-}
-
 public(package) fun set_paused<T>(asset: &mut Asset<T>, paused: bool) {
     asset.paused = paused;
 }
@@ -326,10 +319,6 @@ public(package) fun transfer_positive_account_identity<T>(
     identity: IdentityKey,
 ) {
     shareholders::transfer_identity(object::id(asset), &mut asset.shareholders, previous_identity, identity);
-}
-
-public(package) fun assert_min_positive_balance<T>(asset: &Asset<T>, balance: u64) {
-    shareholders::assert_min_positive_balance(&asset.shareholders, balance);
 }
 
 fun assert_max_supply(max_supply: Option<u64>, supply: u64) {

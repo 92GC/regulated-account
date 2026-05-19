@@ -76,7 +76,7 @@ flowchart TD
     create --> caps[returned caps]
     caps --> custody[issuer-chosen custody]
     user[User or wrapper package] --> account[create Account]
-    caps --> mint[mint or restricted mint]
+    caps --> mint[mint]
     account --> transfer[plain transfer]
 ```
 
@@ -191,28 +191,28 @@ admin address.
 - Holder actions use `HolderAuthority<T>` from owner authority or an authorized
   package witness.
 - Package authority can move only its package-held account, not user accounts.
-- Time-sensitive paths use `Time`: `no_time()` fails closed, and
-  `clock_time(&clock)` evaluates KYC expiry and locks.
-- Restricted lots are capped at 1024 active lots, coalesced by unlock time and
-  reference hash, and tracked with cached aggregate accounting.
+- Time-sensitive KYC paths use `Time`: `no_time()` fails closed, and
+  `clock_time(&clock)` evaluates KYC and proof expiry.
 - Freeze is identity-level for operation checks and account creation: freezing an
   account also freezes its identity until thawed.
-- Transfers enforce KYC, freeze, pause, shareholder caps, restricted lots, memo
-  rules, and minimum positive balance.
+- Transfers enforce KYC, freeze, pause, shareholder caps, and memo rules.
+- Balances are stored directly on shared `Account<T>` objects as a `u64`
+  balance field. They are not stored in an asset-level table or dynamic field.
 - `supply` is canonical `u64`; `MetadataCap<Receipt<T>>` can update display
   decimals; metadata fields are bounded.
-- `min_positive_balance` blocks dust, permits full exit to zero, and can only
-  increase when no identities have positive balances.
+- Positive-balance account counts are tracked by identity only for shareholder
+  caps; they are not the balance source of truth.
+- `transfer::close_account` lets a holder transfer the full remaining balance to
+  another approved account and delete the source account in one call.
+- `transfer::close_empty_account` deletes an already-empty account.
 - Wrapper deposits and unwraps use normal transfers plus package authority.
 - In allowlist mode, wrapper package identities must be approved before receiving.
-- Clawback enforces recipient credit KYC and recipient minimum positive balance,
-  while still allowing partial recovery amounts whose resulting balances satisfy
-  policy.
-- Admin policy changes use `reason_hash`; clawback and admin burn also use
-  `Time`. Clawback also accepts `KycApproval<T>` proofs for the recipient credit
-  check. Operator tooling can pass `clock_time(&clock)` unconditionally for
-  recovery paths; `no_time()` is only valid when the debited account has no
-  active restricted lots.
+- Vesting, lockups, and escrow schedules should live in typed extension packages
+  or vaults with their own `Account<T>`, not in the core account object.
+- Vault releases use normal transfers to pre-approved recipient accounts.
+- Clawback enforces recipient credit KYC.
+- Admin policy changes, clawback, and admin burn use `reason_hash`. Clawback also
+  accepts `Time` and `KycApproval<T>` proofs for the recipient credit check.
 - Pause blocks public transfer, mint, burn, and account creation; admin recovery
   and policy controls remain available.
 - Typed extensions bind to core objects with `asset::id` and `account::id`.

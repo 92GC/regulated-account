@@ -6,14 +6,11 @@ use regulated_account::keys::IdentityKey;
 use sui::table::{Self, Table};
 
 const EShareholderCapExceeded: u64 = 23;
-const EMinPositiveBalance: u64 = 31;
-const EMinPositiveBalanceMigrationRequired: u64 = 34;
 
 /// Bounded positive-balance account counts by legal identity.
 public struct Shareholders has store {
     total: u64,
     max: Option<u64>,
-    min_positive_balance: u64,
     accounts: Table<IdentityKey, u64>,
 }
 
@@ -21,16 +18,12 @@ public(package) fun new(ctx: &mut TxContext): Shareholders {
     Shareholders {
         total: 0,
         max: option::none(),
-        min_positive_balance: 0,
         accounts: table::new(ctx),
     }
 }
 
 public(package) fun total(shareholders: &Shareholders): u64 { shareholders.total }
 public(package) fun cap(shareholders: &Shareholders): Option<u64> { shareholders.max }
-public(package) fun min_positive_balance(shareholders: &Shareholders): u64 {
-    shareholders.min_positive_balance
-}
 
 public(package) fun identity_positive_account_count(
     shareholders: &Shareholders,
@@ -46,14 +39,6 @@ public(package) fun identity_positive_account_count(
 public(package) fun set_cap(shareholders: &mut Shareholders, max: Option<u64>) {
     assert_cap(shareholders.total, max);
     shareholders.max = max;
-}
-
-public(package) fun set_min_positive_balance(shareholders: &mut Shareholders, min_balance: u64) {
-    assert!(
-        min_balance <= shareholders.min_positive_balance || shareholders.total == 0,
-        EMinPositiveBalanceMigrationRequired
-    );
-    shareholders.min_positive_balance = min_balance;
 }
 
 public(package) fun register(asset_id: ID, shareholders: &mut Shareholders, identity: IdentityKey) {
@@ -148,10 +133,6 @@ public(package) fun transfer_identity(
         shareholders.total,
     );
     policy_events::emit_shareholder_count_updated(asset_id, identity, 1, shareholders.total);
-}
-
-public(package) fun assert_min_positive_balance(shareholders: &Shareholders, balance: u64) {
-    assert!(balance == 0 || balance >= shareholders.min_positive_balance, EMinPositiveBalance);
 }
 
 fun assert_cap(total: u64, max: Option<u64>) {

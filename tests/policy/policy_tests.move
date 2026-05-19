@@ -937,7 +937,7 @@ fun pause_cap_allows_admin_burn() {
             10,
         );
         asset_policy::pause(&mut asset, &pause_cap, b"pause");
-        ledger::admin_burn(&mut asset, &burn_cap, authority::no_time(), &mut account, 4, b"admin-burn");
+        ledger::admin_burn(&mut asset, &burn_cap, &mut account, 4, b"admin-burn");
 
         assert_eq!(account::balance(&account), 6);
         assert_eq!(asset::supply(&asset), 6);

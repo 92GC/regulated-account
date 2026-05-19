@@ -24,6 +24,42 @@ public fun transfer<T>(
     kyc_proof::destroy_all(approvals);
 }
 
+public fun close_empty_account<T>(
+    asset: &Asset<T>,
+    holder_authority: HolderAuthority<T>,
+    account: Account<T>,
+) {
+    authorization::assert_authorized(asset, &account, holder_authority);
+    account::assert_asset(&account, asset::id(asset));
+    let account_id = account::id(&account);
+    account::destroy_empty(account);
+    events::emit_account_closed(asset::id(asset), account_id, option::none(), 0);
+}
+
+public fun close_account<T>(
+    asset: &mut Asset<T>,
+    holder_authority: HolderAuthority<T>,
+    time: Time,
+    approvals: vector<KycApproval<T>>,
+    mut account: Account<T>,
+    to: &mut Account<T>,
+    memo: vector<u8>,
+) {
+    authorization::assert_authorized(asset, &account, holder_authority);
+    let now_ms = authority::time_to_option(time);
+    let amount = account::balance(&account);
+    let account_id = account::id(&account);
+    let to_id = account::id(to);
+    account::assert_asset(&account, asset::id(asset));
+    account::assert_asset(to, asset::id(asset));
+    if (amount > 0) {
+        transfer_internal(asset, &mut account, to, amount, memo, now_ms, &approvals);
+    };
+    account::destroy_empty(account);
+    events::emit_account_closed(asset::id(asset), account_id, option::some(to_id), amount);
+    kyc_proof::destroy_all(approvals);
+}
+
 fun transfer_internal<T>(
     asset: &mut Asset<T>,
     from: &mut Account<T>,
@@ -35,7 +71,7 @@ fun transfer_internal<T>(
 ) {
     validation::assert_positive_amount(amount);
     assert_common_transfer(asset, from, to, &memo, &now_ms, approvals);
-    ledger::prepare_transferable_debit(from, amount, &now_ms);
+    ledger::prepare_transferable_debit(from, amount);
     ledger::debit_account(asset, from, amount);
     ledger::credit_account(asset, to, amount);
     events::emit_transfer(

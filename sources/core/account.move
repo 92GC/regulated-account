@@ -1,9 +1,7 @@
 module regulated_account::account;
 
 use regulated_account::amount_math;
-use regulated_account::authority::{Self, Time};
 use regulated_account::keys::{Self, HolderKey, IdentityKey};
-use regulated_account::restricted_lots::{Self, RestrictedLot, RestrictedLots};
 use regulated_account::validation;
 
 const EAssetMismatch: u64 = 3;
@@ -12,7 +10,7 @@ const EInsufficientBalance: u64 = 8;
 const EImmutableHolder: u64 = 14;
 const ELockedBalanceExceeded: u64 = 24;
 const ENotAuthorized: u64 = 5;
-const ETimeRequired: u64 = 33;
+const EAccountNotEmpty: u64 = 35;
 
 /// Shared per-holder balance account for one regulated asset type.
 public struct Account<phantom T> has key {
@@ -22,7 +20,6 @@ public struct Account<phantom T> has key {
     identity: IdentityKey,
     balance: u64,
     locked_balance: u64,
-    restricted_lots: RestrictedLots,
     frozen: bool,
     immutable_holder: bool,
     memo_required: bool,
@@ -51,7 +48,6 @@ public(package) fun new<T>(
         identity,
         balance: 0,
         locked_balance: 0,
-        restricted_lots: restricted_lots::empty(),
         frozen,
         immutable_holder,
         memo_required,
@@ -72,26 +68,12 @@ public fun locked_balance<T>(account: &Account<T>): u64 { account.locked_balance
 public fun frozen<T>(account: &Account<T>): bool { account.frozen }
 public fun allow_public_credits<T>(account: &Account<T>): bool { account.allow_public_credits }
 public fun memo_required<T>(account: &Account<T>): bool { account.memo_required }
-public fun restricted_lot_count<T>(account: &Account<T>): u64 {
-    restricted_lots::count(&account.restricted_lots)
-}
-
-public fun restricted_lots<T>(account: &Account<T>): vector<RestrictedLot> {
-    restricted_lots::lots(&account.restricted_lots)
-}
-
-/// Returns the locked amount from restricted lots at `time`.
-/// Passing `authority::no_time()` fails closed and treats every non-zero restricted lot as locked.
-public fun restricted_locked_balance_at<T>(account: &Account<T>, time: Time): u64 {
-    let now_ms = authority::time_to_option(time);
-    restricted_locked_balance(account, &now_ms)
-}
-
-/// Returns spendable balance after static locks and restricted lots at `time`.
-/// Passing `authority::no_time()` treats every non-zero restricted lot as locked.
-public fun transferable_balance_at<T>(account: &Account<T>, time: Time): u64 {
-    let now_ms = authority::time_to_option(time);
-    transferable_balance(account, &now_ms)
+public fun transferable_balance<T>(account: &Account<T>): u64 {
+    if (account.locked_balance >= account.balance) {
+        0
+    } else {
+        account.balance - account.locked_balance
+    }
 }
 
 public(package) fun assert_asset<T>(account: &Account<T>, asset_id: ID) {
@@ -174,23 +156,13 @@ public(package) fun debit<T>(account: &mut Account<T>, amount: u64): bool {
     account.balance = account.balance - amount;
     if (account.balance == 0) {
         account.locked_balance = 0;
-        account.restricted_lots = restricted_lots::empty();
         true
     } else {
         false
     }
 }
 
-public(package) fun force_debit<T>(
-    account: &mut Account<T>,
-    amount: u64,
-    now_ms: &Option<u64>,
-): bool {
-    if (!restricted_lots::is_empty(&account.restricted_lots)) {
-        assert!(now_ms.is_some(), ETimeRequired);
-        prune_unlocked_restricted_lots(account, now_ms);
-    };
-
+public(package) fun force_debit<T>(account: &mut Account<T>, amount: u64): bool {
     let became_zero = debit(account, amount);
     if (!became_zero) {
         cap_locks_to_balance(account);
@@ -199,51 +171,32 @@ public(package) fun force_debit<T>(
 }
 
 public(package) fun prepare_transferable_debit<T>(
-    account: &mut Account<T>,
+    account: &Account<T>,
     amount: u64,
-    now_ms: &Option<u64>,
 ) {
-    prune_unlocked_restricted_lots(account, now_ms);
-    assert!(transferable_balance(account, now_ms) >= amount, EInsufficientBalance);
+    assert!(transferable_balance(account) >= amount, EInsufficientBalance);
 }
 
-public(package) fun add_restricted_lot<T>(
-    account: &mut Account<T>,
-    amount: u64,
-    unlock_ms: u64,
-    external_ref_hash: vector<u8>,
-) {
-    restricted_lots::add(&mut account.restricted_lots, amount, unlock_ms, external_ref_hash);
-}
-
-public(package) fun restricted_locked_balance<T>(account: &Account<T>, now_ms: &Option<u64>): u64 {
-    restricted_lots::locked_balance(&account.restricted_lots, now_ms)
-}
-
-public(package) fun transferable_balance<T>(account: &Account<T>, now_ms: &Option<u64>): u64 {
-    if (account.locked_balance >= account.balance) {
-        0
-    } else {
-        let remaining_after_lock = account.balance - account.locked_balance;
-        let restricted = restricted_locked_balance(account, now_ms);
-        if (restricted >= remaining_after_lock) {
-            0
-        } else {
-            remaining_after_lock - restricted
-        }
-    }
-}
-
-public(package) fun prune_unlocked_restricted_lots<T>(
-    account: &mut Account<T>,
-    now_ms: &Option<u64>,
-) {
-    restricted_lots::prune_unlocked(&mut account.restricted_lots, now_ms);
+public(package) fun destroy_empty<T>(account: Account<T>) {
+    let Account {
+        id,
+        asset_id: _,
+        holder: _,
+        identity: _,
+        balance,
+        locked_balance,
+        frozen: _,
+        immutable_holder: _,
+        memo_required: _,
+        allow_public_credits: _,
+    } = account;
+    assert!(balance == 0, EAccountNotEmpty);
+    assert!(locked_balance == 0, ELockedBalanceExceeded);
+    id.delete();
 }
 
 fun cap_locks_to_balance<T>(account: &mut Account<T>) {
     if (account.locked_balance > account.balance) {
         account.locked_balance = account.balance;
     };
-    restricted_lots::cap_to_balance(&mut account.restricted_lots, account.balance);
 }

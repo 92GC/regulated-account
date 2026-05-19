@@ -19,12 +19,6 @@ public struct KycUpdatedEvent has copy, drop {
     external_ref_hash: vector<u8>,
 }
 
-public struct MinPositiveBalanceUpdatedEvent has copy, drop {
-    asset_id: ID,
-    min_positive_balance: u64,
-    reason_hash: vector<u8>,
-}
-
 public struct MaxSupplyUpdatedEvent has copy, drop {
     asset_id: ID,
     max_supply: Option<u64>,
@@ -145,14 +139,6 @@ public(package) fun emit_kyc_updated(
         expires_ms,
         external_ref_hash,
     });
-}
-
-public(package) fun emit_min_positive_balance_updated(
-    asset_id: ID,
-    min_positive_balance: u64,
-    reason_hash: vector<u8>,
-) {
-    event::emit(MinPositiveBalanceUpdatedEvent { asset_id, min_positive_balance, reason_hash });
 }
 
 public(package) fun emit_max_supply_updated(

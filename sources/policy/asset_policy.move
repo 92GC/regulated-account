@@ -59,18 +59,6 @@ public fun set_shareholder_caps<T>(
     policy_events::emit_shareholder_caps_updated(asset::id(asset), max_shareholders, reason_hash);
 }
 
-public fun set_min_positive_balance<T>(
-    asset: &mut Asset<T>,
-    cap: &PolicyCap<T>,
-    min_positive_balance: u64,
-    reason_hash: vector<u8>,
-) {
-    caps::assert_policy(asset::id(asset), cap);
-    validation::assert_external_ref_hash(&reason_hash);
-    asset::set_min_positive_balance(asset, min_positive_balance);
-    policy_events::emit_min_positive_balance_updated(asset::id(asset), min_positive_balance, reason_hash);
-}
-
 public fun authorize_witness<T, W: drop>(asset: &mut Asset<T>, cap: &PolicyCap<T>) {
     caps::assert_policy(asset::id(asset), cap);
     let witness = asset::authorize_witness<T, W>(asset);

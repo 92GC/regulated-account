@@ -46,10 +46,3 @@ public(package) fun max_icon_url_bytes(): u64 { 512 }
 public(package) fun max_kyc_approvals(): u64 { 128 }
 public(package) fun max_trusted_kyc_sources(): u64 { 128 }
 public(package) fun max_required_kyc_sources(): u64 { 32 }
-
-/// Maximum active restricted-lot records stored on one account.
-///
-/// This package cap keeps worst-case lock maintenance bounded while the account
-/// keeps cached aggregate accounting so normal transfer checks do not scan all
-/// locked lots unless pruning is required.
-public(package) fun max_restricted_lots(): u64 { 1024 }

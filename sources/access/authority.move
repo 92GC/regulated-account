@@ -12,7 +12,7 @@ public struct HolderAuthority<phantom T> {
     witness: Option<type_name::TypeName>,
 }
 
-/// Optional timestamp evidence for compliance and lock checks.
+/// Optional timestamp evidence for KYC and proof-expiry checks.
 public struct Time {
     now_ms: Option<u64>,
 }
@@ -23,13 +23,12 @@ public struct WitnessPolicy has store {
 }
 
 /// Creates time evidence with no clock.
-/// Time-sensitive checks fail closed: expiring KYC is not considered current, and
-/// restricted lots are treated as locked.
+/// Time-sensitive checks fail closed: expiring KYC is not considered current.
 public fun no_time(): Time {
     Time { now_ms: option::none() }
 }
 
-/// Creates time evidence from the Sui clock for KYC expiry and restricted-lot checks.
+/// Creates time evidence from the Sui clock for KYC and proof-expiry checks.
 public fun clock_time(clock: &Clock): Time {
     Time { now_ms: option::some(clock::timestamp_ms(clock)) }
 }

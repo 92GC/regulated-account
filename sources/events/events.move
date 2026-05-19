@@ -22,6 +22,13 @@ public struct AccountCreated has copy, drop {
     receipt_id: Option<ID>,
 }
 
+public struct AccountClosed has copy, drop {
+    asset_id: ID,
+    account_id: ID,
+    transferred_to: Option<ID>,
+    transferred_amount: u64,
+}
+
 public struct TransferEvent has copy, drop {
     asset_id: ID,
     from_account: ID,
@@ -34,14 +41,6 @@ public struct MintEvent has copy, drop {
     asset_id: ID,
     account_id: ID,
     amount: u64,
-}
-
-public struct RestrictedMintEvent has copy, drop {
-    asset_id: ID,
-    account_id: ID,
-    amount: u64,
-    unlock_ms: u64,
-    external_ref_hash: vector<u8>,
 }
 
 public struct BurnEvent has copy, drop {
@@ -107,6 +106,15 @@ public(package) fun emit_account_created(
     event::emit(AccountCreated { asset_id, account_id, holder, identity, receipt_id });
 }
 
+public(package) fun emit_account_closed(
+    asset_id: ID,
+    account_id: ID,
+    transferred_to: Option<ID>,
+    transferred_amount: u64,
+) {
+    event::emit(AccountClosed { asset_id, account_id, transferred_to, transferred_amount });
+}
+
 public(package) fun emit_transfer(
     asset_id: ID,
     from_account: ID,
@@ -125,22 +133,6 @@ public(package) fun emit_transfer(
 
 public(package) fun emit_mint(asset_id: ID, account_id: ID, amount: u64) {
     event::emit(MintEvent { asset_id, account_id, amount });
-}
-
-public(package) fun emit_restricted_mint(
-    asset_id: ID,
-    account_id: ID,
-    amount: u64,
-    unlock_ms: u64,
-    external_ref_hash: vector<u8>,
-) {
-    event::emit(RestrictedMintEvent {
-        asset_id,
-        account_id,
-        amount,
-        unlock_ms,
-        external_ref_hash,
-    });
 }
 
 public(package) fun emit_burn(
