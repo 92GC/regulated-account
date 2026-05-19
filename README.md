@@ -1,4 +1,4 @@
-# Regulated Account
+# Regulated Account Standard
 
 `regulated_account` is a framework package. Issuers do not mint an instance by
 calling a factory from an existing coin type. Instead, each issuer publishes a
@@ -88,7 +88,7 @@ Metadata follows the same typed-discovery idea as Sui Currency. Wallets discover
 an owned `Receipt<T>` object, then read the shared `AssetMetadata<Receipt<T>>`
 object for symbol, name, description, icon URL, and decimals. `Asset<T>` carries
 policy and supply state, not branding.
-After an issuer package publish, anyone can call `register_metadata<T>` with the
+After an issuer package publish, anyone can call `metadata::register<T>` with the
 shared `MetadataRegistry` and `AssetMetadata<Receipt<T>>`; the registry then maps
 `receipt_type<T>()` to the canonical metadata object ID.
 
@@ -134,12 +134,15 @@ always exit to zero, but any non-zero balance must meet the configured minimum.
 Transfer fees are configured with `set_fee_config`, which takes the receiver
 `Account<T>` by reference and validates that it belongs to the asset, is not
 frozen, and can receive public credits at the supplied `Time`. Use
-`clear_fee_config` to disable fees. Most fee transfers use
-`transfer_with_fee_account`; if the configured fee receiver is also the sender
-or recipient, use `transfer_with_sender_fee_account` or
+`clear_fee_config` to disable fees. Plain `transfer` is only available when no
+fee receiver is configured; once fees are configured, callers must use a
+fee-bearing transfer path even if a bps-only fee would round to zero. Most fee
+transfers use `transfer_with_fee_account`; if the configured fee receiver is
+also the sender or recipient, use `transfer_with_sender_fee_account` or
 `transfer_with_recipient_fee_account` because Move cannot pass one shared object
-as multiple mutable account references. Fee credits are exempt from
-`min_positive_balance` so small transfer-agent fees cannot brick transfers.
+as multiple mutable account references. Dedicated fee-account credits are exempt
+from `min_positive_balance`, while recipient-fee transfers enforce the
+recipient's final positive balance as a normal account credit.
 
 Wrapper integrations use normal transfers. A user deposits by signing a transfer
 from their address account to the wrapper's package-held account. Unwrap is the
@@ -153,8 +156,8 @@ records off-chain and put the digest/reference hash on-chain.
 Clawback is an admin recovery power: it can credit a non-frozen destination that
 allows public credits even when that destination would fail normal transfer KYC.
 
-Pause scope is intentionally transfer-only. `pause` blocks user transfer
-execution, but mint, burn, admin burn, clawback, fee changes, and policy changes
+Pause blocks public balance-changing flows: transfer, mint, public burn, and
+public account creation. Admin burn, clawback, fee changes, and policy changes
 remain available so operators can respond during incidents.
 
 Typed extensions should be separate objects, for example `BondTerms<T>` or
@@ -175,7 +178,7 @@ code.
 | `asset` | 11 | `EPolicyImmutable` | Compliance mode has been locked. |
 | `asset` | 12 | `EMintClosed` | Minting has been permanently closed. |
 | `asset` | 17 | `EInvalidDisplayScale` | Display-scale numerator or denominator is invalid. |
-| `asset` | 18 | `EAssetPaused` | User transfer attempted while the asset is paused. |
+| `asset` | 18 | `EAssetPaused` | Paused asset blocked transfer, mint, public burn, or public account creation. |
 | `asset` | 22 | `EMaxSupplyExceeded` | Supply would exceed the configured maximum. |
 | `account` | 3 | `EAssetMismatch` | Account does not belong to the asset. |
 | `account` | 5 | `ENotAuthorized` | Account creation holder/identity does not match sender. |
@@ -230,6 +233,16 @@ code.
 - `events.move`: canonical lifecycle, transfer, ledger, and metadata events.
 - `policy_events.move`: canonical policy, compliance, and shareholder events.
 - `amount_math.move`: checked integer/display-scale helpers.
+
+Tests are split by behavior under `tests/`:
+
+- `lifecycle_tests.move`: mint, burn, supply, display-scale, and zero-amount paths.
+- `metadata_tests.move`: metadata updates and registry indexing.
+- `compliance_tests.move`: KYC, freeze/thaw, pause, and policy controls.
+- `shareholder_tests.move`: shareholder caps and minimum-positive-balance rules.
+- `fee_tests.move`: fee configuration, fee transfer paths, and fee arithmetic.
+- `restriction_tests.move`: static locks, restricted lots, clawback, and recovery.
+- `wrapper_tests.move`: package authority, wrapper flows, and typed extensions.
 
 Use `regulated_account::regulated_account as ra` for bootstrap creation calls.
 Use the domain modules directly for operations and views, for example

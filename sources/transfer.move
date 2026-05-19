@@ -75,8 +75,7 @@ fun transfer_internal<T>(
 ) {
     validation::assert_positive_amount(amount);
     assert_common_transfer(asset, from, to, &memo, &now_ms);
-    let fee_amount = fees::compute(asset::fee(asset), amount);
-    assert!(fee_amount == 0, EUseTransferWithFee);
+    assert!(fees::receiver(asset::fee(asset)).is_none(), EUseTransferWithFee);
     ledger::prepare_transferable_debit(from, amount, &now_ms);
     ledger::debit_account(asset, from, amount);
     ledger::credit_account(asset, to, amount);
@@ -86,7 +85,7 @@ fun transfer_internal<T>(
         account::id(to),
         option::none(),
         amount,
-        fee_amount,
+        0,
         amount,
         memo,
     );
