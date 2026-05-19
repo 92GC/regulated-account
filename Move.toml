@@ -1,0 +1,12 @@
+[package]
+name = "regulated_account"
+edition = "2024.beta"
+license = "MIT"
+
+[dependencies]
+
+[addresses]
+regulated_account = "0x0"
+
+[environments]
+localnet = "4afd09da"
