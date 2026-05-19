@@ -1,11 +1,11 @@
-# Regulated Account Standard
+# Regulated Account
 
 `regulated_account` is a framework package. Issuers do not mint an instance by
 calling a factory from an existing coin type. Instead, each issuer publishes a
 small Move package with its own one-time witness type, then calls
 `regulated_account::regulated_account::create_asset` from that package's `init`.
 
-A Sui-native regulated account standard for the same design space as ERC-1400,
+A Sui-native regulated account framework for the same design space as ERC-1400,
 ERC-3643, and Token-2022, without privacy extensions or a global KYC singleton.
 
 This is similar to Sui Coin deployment because it uses a one-time witness, but it
@@ -39,7 +39,7 @@ are not evaluated; use `KYC_DENIED` or `KYC_EXPIRED` status to block an identity
 
 ```mermaid
 flowchart TD
-    standard[Standard package publish] --> registry[shared MetadataRegistry]
+    framework[Framework package publish] --> registry[shared MetadataRegistry]
     issuer[Issuer package publish with OTW] --> create[create_asset in init]
     create --> asset[shared Asset and metadata]
     create --> caps[admin caps]
@@ -86,7 +86,7 @@ Publish the issuer package:
 sui client publish --gas-budget 100000000
 ```
 
-The standard package publish creates:
+The framework package publish creates:
 
 - one shared package-level `MetadataRegistry`.
 
