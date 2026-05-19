@@ -280,7 +280,7 @@ fun too_many_kyc_approvals_are_rejected() {
 
         let mut approvals = vector[];
         let mut i = 0;
-        while (i <= constants::max_kyc_approvals()) {
+        while (i <= constants::max_external_kyc_proofs_per_call()) {
             approvals.push_back(kyc_registry::approve<TEST, REGISTRY>(
                 &asset,
                 &registry,

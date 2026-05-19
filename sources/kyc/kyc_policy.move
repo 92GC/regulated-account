@@ -160,7 +160,7 @@ fun assert_direction_allowed_with_approvals<T>(
     approvals: &vector<KycApproval<T>>,
     is_credit: bool,
 ) {
-    assert!(approvals.length() <= constants::max_kyc_approvals(), EKycApprovalLimit);
+    assert!(approvals.length() <= constants::max_external_kyc_proofs_per_call(), EKycApprovalLimit);
     let native_decision = native_direction_decision(policy, identity, now_ms, is_credit);
     let mode_allowed = if (native_decision.is_some()) {
         *native_decision.borrow()

@@ -43,6 +43,6 @@ public(package) fun max_icon_url_bytes(): u64 { 512 }
 
 // === Policy Limits ===
 
-public(package) fun max_kyc_approvals(): u64 { 128 }
+public(package) fun max_external_kyc_proofs_per_call(): u64 { 128 }
 public(package) fun max_trusted_kyc_sources(): u64 { 128 }
 public(package) fun max_required_kyc_sources(): u64 { 32 }
